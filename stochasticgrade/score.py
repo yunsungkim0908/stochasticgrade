@@ -55,7 +55,7 @@ class AndersonDarlingScorer(Scorer):
     def __str__(self):
         return 'AndersonDarlingScorer'
 
-    def compute_score(self, stud_samples, soln_samples, sid, qid):
+    def compute_score(self, stud_samples, soln_samples):
         samples = np.array([soln_samples, stud_samples])
         np.random.shuffle(samples)
         score = stats.anderson_ksamp(samples).statistic
@@ -110,7 +110,7 @@ class MSDScorer(Scorer):
     def __str__(self):
         return 'MSDScorer'
 
-    def compute_score(self, stud_samples, soln_samples, sid, qid):
+    def compute_score(self, stud_samples, soln_samples):
         mean_term = np.linalg.norm(np.mean(stud_samples, axis=0) - np.mean(soln_samples, axis=0)) ** 2
         stud_var_term = np.std(stud_samples) ** 2
         if self.soln_var_term is None:
@@ -147,7 +147,7 @@ class TScorer(Scorer):
     def __str__(self):
         return 'TClusterScorer'
 
-    def compute_score(self, stud_samples, soln_samples, sid, qid):
+    def compute_score(self, stud_samples, soln_samples):
         ttest = stats.ttest_ind(stud_samples, soln_samples)
         score = ttest.statistic
         return score
@@ -171,7 +171,7 @@ class WassersteinScorer(Scorer):
     def __str__(self):
         return 'WassersteinScorer'
     
-    def compute_score(self, stud_samples, soln_samples, sid, qid):
+    def compute_score(self, stud_samples, soln_samples):
         score = stats.wasserstein_distance(stud_samples, soln_samples)
         if not np.isfinite(score):
             score = 1e7
