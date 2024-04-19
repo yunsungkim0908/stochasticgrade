@@ -14,11 +14,12 @@ import sys
 import time
 import warnings
 
+from tqdm import tqdm
 from multiprocessing import Process, Queue
 from numbers import Number
-from tqdm import tqdm
 
-from stochasticgrade.constants import *
+from stochasticgrade.constants import DATA_DIR
+from stochasticgrade.utils import get_euclidean_distance, get_orthogonal_projection
 
 
 # Suppress syntax warnings
@@ -26,47 +27,32 @@ warnings.filterwarnings('ignore')
 
 
 def get_samples(
-    sid, qid, num_samples, dtype, test_label='', test_args=[],
+    sid, qid, num_samples, dtype, func_name, test_label='', test_args=[],
     early_stopping=10000, max_timeouts=5, append_samples=False, pos=0
 ):
     """
     Sample `num_samples` samples from `prog`. 
-    
-    Parameters:
-    sid (str):             student ID for the program from which samples are collected
-    qid (str):             question ID for the problem to be evaluated
-    num_samples (int):     number of samples to collect
-    dtype (str):           data type of the samples
-    test_label (str):      name of the test case to be evaluated
-    test_args (list):      arguments to be used for the test case
-    early_stopping (int):  fewest number of samples needed for degeneracy detection
-    max_timeouts (int):    maximum number of timeouts needed for degeneracy detection
-    append_samples (bool): append samples to the existing sample set
-    pos (int):             posiiton for progress bars
-    
-    Returns:
-    samples (list): The list of collected samples
-    
+    dtype is either scalar or list.
     """
     
     # Load the program from which we will be sampling. If samples already exist,
     # load the samples in as well. 
     if 'solution' in sid:
         sample_path = os.path.join(DATA_DIR, qid, 'solution', sid, test_label, 'samples.npy')
-        prog_path = os.path.join(DATA_DIR, qid, 'solution', 'solution', 'response.txt')
+        prog_path = os.path.join(DATA_DIR, qid, 'solution', 'solution', 'program.py')
     elif 'closest_error' in sid:
         sample_path = os.path.join(DATA_DIR, qid, 'closest_error', sid, test_label, 'samples.npy')
-        prog_path = os.path.join(DATA_DIR, qid, 'closest_error', sid, 'response.txt')
+        prog_path = os.path.join(DATA_DIR, qid, 'closest_error', sid, 'program.py')
     else:
         sample_path = os.path.join(DATA_DIR, qid, 'students', sid, test_label, 'samples.npy')
-        prog_path = os.path.join(DATA_DIR, qid, 'students', sid, 'response.txt')
+        prog_path = os.path.join(DATA_DIR, qid, 'students', sid, 'program.py')
     with open(prog_path) as f:
         prog = f.read()
         
     if append_samples and os.path.isfile(sample_path):
         samples = list(np.load(sample_path, allow_pickle=True))
     else:
-        samples = []
+        samples = []     
     
     if dtype == 'scalar':
         sample_fn = scalar_sample 
@@ -99,8 +85,9 @@ def get_samples(
             break
         
         # Proceed with sampling as normal
+        
         start = time.time()
-        val = sample_fn(qid, prog, dtype, test_args=test_args)
+        val = sample_fn(qid, prog, dtype, func_name, test_args=test_args)
         end = time.time()
         
         # Add the newly sampled value(s) to the list of samples
@@ -144,51 +131,51 @@ def get_samples(
     return samples
 
 
-def scalar_sample(qid, prog, dtype, test_args=[]):
+def scalar_sample(qid, prog, dtype, func_name, test_args=[]):
     """
     Execution function for scalar data types.
     """
-    return exec_program(qid, prog, test_args=test_args)
+    return exec_program(qid, prog, func_name, test_args=test_args)
 
 
-def list_sample(qid, prog, dtype, test_args=[]):
+def list_sample(qid, prog, dtype, func_name, test_args=[]):
     """
     Execution function for list data type.
     """
-    return exec_program(qid, prog, test_args=test_args, allowed_types=[list])
+    return exec_program(qid, prog, func_name, test_args=test_args, allowed_types=[list])
 
 
-def multidim_sample(qid, prog, dtype, test_args=[]):
+def multidim_sample(qid, prog, dtype, func_name, test_args=[]):
     """
     Execution function for multidimensional data types.
     """
-    return exec_program(qid, prog, test_args=test_args, allowed_types=[list])
+    return exec_program(qid, prog, func_name, test_args=test_args, allowed_types=[list])
 
 
-def evaluate_student_code(qid, prog, test_args=[], test_agent_name='__test_agent'):
+def evaluate_student_code(qid, prog, func_name, test_args=[]):
     """
     Evaluate the student code in the context of the associated problem
     environment. Suppress stdout.
     """
     
-    # Load in the testing program 
-    test_path = os.path.join(DATA_DIR, qid, 'test_agent.py')
-    if not os.path.isfile(test_path):
-        print('ERROR: Must create the test_agent.py file under the given qid directory!')
-        raise Exception
-    with open(test_path) as f:
-        test_agent = f.read()
-        
-    # Redirect output to prevent extraneous printing
-    with contextlib.redirect_stdout(io.StringIO()):
-        try:
-            # Execute the program and record the output
-            exec(prog, locals(), locals())
-            exec(test_agent, locals(), locals())
-            val = locals()[test_agent_name](*test_args)
-        except:
-            pass
-
+    val = None
+    
+    try:
+        # Redirect output to prevent extraneous printing
+        with contextlib.redirect_stdout(io.StringIO()):
+            # Execute the student code and record the output
+            local_scope = {}
+            exec(prog, local_scope, local_scope)
+            func = local_scope.get(func_name)
+            print(func)
+            if callable(func):
+                val = func(*test_args)
+            else:
+                raise ValueError(f'No function named "{func_name}" found in the code for question {qid}')
+    except Exception as e:
+        print(e)
+        pass
+    
     return val
 
 
@@ -196,7 +183,7 @@ def _alarm_handler(signum, frame):
     raise TimeoutError
     
 
-def exec_program(qid, prog, timeout=1, test_args=[], allowed_types=[]):
+def exec_program(qid, prog, func_name, timeout=1, test_args=[], allowed_types=[]):
     """
     Evaluate the student program and return its return value.
     Return None if student program cannot be evaluated.
@@ -207,7 +194,7 @@ def exec_program(qid, prog, timeout=1, test_args=[], allowed_types=[]):
     signal.alarm(timeout)
 
     try:  # Attempt to run the program
-        val = evaluate_student_code(qid, prog, test_args=test_args)
+        val = evaluate_student_code(qid, prog, func_name, test_args=test_args)
     except KeyboardInterrupt:
         raise KeyboardInterrupt
     except Exception:  # Caught an error
@@ -221,8 +208,8 @@ def exec_program(qid, prog, timeout=1, test_args=[], allowed_types=[]):
     return val
 
 
-def get_student_info_single(
-    sid, qid, num_samples, dtype, 
+def sample_sid_single(
+    sid, qid, num_samples, dtype, func_name,
     test_label='', test_args=[], append_samples=False, pos=0, proc_queue=None
 ):
     """
@@ -231,16 +218,16 @@ def get_student_info_single(
     
     # Create the appropriate directory name where samples will be stored
     dir_lst = [DATA_DIR, qid]
-    if 'closest_error' in sid:
-        dir_lst.append('closest_error')
+    if 'solution' in sid:
+        sid_type = 'solution'
+    elif 'closest_error' in sid:
+        sid_type = 'closest_error'
     else:
-        dir_lst.append('solution' if 'solution' in sid else 'students')
-    if 'mc_solution_' in sid:
-        dir_lst.append('mc_solutions')
+        sid_type = 'students'
+    dir_lst.append(sid_type)
     dir_lst += [sid]
     dir_lst += [test_label]
     dirname = os.path.join(*dir_lst)
-    
     sample_path = os.path.join(dirname, 'samples.npy')
     
     # If samples already exist or we don't want to append, don't do anything
@@ -249,31 +236,134 @@ def get_student_info_single(
             os.makedirs(dirname)
 
         samples = get_samples(
-            sid, qid, num_samples, dtype, test_label=test_label, 
+            sid, qid, num_samples, dtype, func_name, test_label=test_label, 
             test_args=test_args, append_samples=append_samples, pos=pos
         )
         
-        np.save(sample_path, np.array(samples))   
+        np.save(sample_path, np.array(samples))    
         
     if proc_queue is not None:
         proc_queue.put((mp.current_process().pid, pos))
         
         
-def get_student_info_multi(
-        sids, qid, num_samples, dtype, max_parallel,
-        test_label='', test_args=[], append_samples=False, clear_dir=False
+def sample_sid_multi(
+    sids, qid, num_samples, dtype, func_name, max_parallel,
+    test_label='', test_args=[], append_samples=False
 ):
-    # Remove existing directory if requested / create directory if needed
-    dirname = os.path.join(DATA_DIR, qid, 'students')
-    if not os.path.exists(dirname):
-        os.makedirs(dirname)
-    elif clear_dir:
-        print('Removing existing content...')
-        shutil.rmtree(dirname)
-        os.makedirs(dirname)
 
     # Set up parallelization
     proc_dict = dict()
+    proc_queue = Queue(max_parallel)
+    processes = []
+    def _deque_proc():
+        (old_pid, old_pos) = proc_queue.get()
+        old_proc = proc_dict[old_pid]
+        old_proc.join()
+        old_proc.close()
+        return old_pos
+    filled_pos = 0
+    pbar = tqdm(sids, total=len(sids), dynamic_ncols=True, nrows=20)
+
+    # Begin sampling for each sid
+    for sid in pbar:
+        if filled_pos >= max_parallel:
+            getpos = _deque_proc()
+        else:
+            pos = filled_pos % max_parallel 
+        filled_pos += 1
+        p = Process(target=sample_sid_single,
+                    args=[sid, qid, num_samples, dtype, func_name, test_label, test_args,
+                          append_samples, save_samples, pos, proc_queue])
+        p.start()
+        proc_dict[p.pid] = p
+        processes.append(p)
+        
+    # Wait for all processes to complete
+    for p in processes:
+        p.join()
+
+    while not proc_queue.empty():
+        _deque_proc()
+        
+        
+def monte_carlo_sample_single(
+    sid, qid, min_n, max_n, dtype, func_name,
+    test_label='', test_args=[], append_samples=False, pos=0, proc_queue=None, 
+    save_samples=False, scorer=None, proj_method=None
+):
+    """
+    Sampling process for singlethreaded Monte Carlo sampling. 
+    """
+    
+    # Create the appropriate directory name where samples will be stored
+    dir_lst = [DATA_DIR, qid]
+    dir_lst.append('solution')
+    dir_lst.append('mc_solutions')
+    dir_lst += [sid]
+    dir_lst += [test_label]
+    dirname = os.path.join(*dir_lst)
+    sample_path = os.path.join(dirname, 'samples.npy')
+    if not os.path.isdir(dirname):
+        os.makedirs(dirname)
+    
+    # If samples already exist or we don't want to append, don't do anything
+    if not os.path.isfile(sample_path) or append_samples:
+
+        samples = get_samples(
+            sid, qid, max_n, dtype, func_name, test_label=test_label, 
+            test_args=test_args, append_samples=append_samples, pos=pos
+        )
+        
+        if save_samples:
+            np.save(sample_path, np.array(samples)) 
+        
+    # Calculate the score for the samples
+    # The scores are calculated for each sample size in powers of 2 from `min_n` to `max_n`
+    sizes = []
+    curr = min_n
+    while curr < max_n:
+        sizes.append(curr)
+        curr *= 2
+    sizes.append(max_n)
+    
+    save_path = os.path.join(dirname, f'mc_scores_{str(scorer)}{proj_method}.json')
+    scores = {}
+    soln_samples = np.load(os.path.join(DATA_DIR, qid, 'solution', 'solution', test_label, 'samples.npy'))
+    
+    # Determine whether to use the samples themselves (1D samples) or their projections
+    # (multidimensional samples) for computing the score
+    if 'array_shape' in dtype:
+        if proj_method == 'ED':
+            stud_dists = get_euclidean_distance(samples, soln_samples, sid, qid)
+            soln_dists = get_euclidean_distance(soln_samples, soln_samples, sid, qid)
+        else:
+            stud_dists = get_orthogonal_projection(samples, soln_samples, sid, qid)
+            soln_dists = get_orthogonal_projection(soln_samples, soln_samples, sid, qid)
+    else:
+        stud_dists = samples
+        soln_dists = soln_samples
+            
+    for size in sizes:
+        np.random.shuffle(stud_dists)
+        np.random.shuffle(soln_dists)
+        score = scorer.compute_score(stud_dists[:size], soln_dists)
+        scores[size] = score
+    with open(save_path, 'w') as f:
+        json.dump(scores, f)
+        
+    if proc_queue is not None:
+        proc_queue.put((mp.current_process().pid, pos))
+        
+        
+def monte_carlo_sample_multi(
+        sids, qid, min_n, max_n, dtype, func_name, max_parallel,
+        test_label='', test_args=[], append_samples=False, save_samples=False, 
+        scorer=None, proj_method=''
+):
+    
+    # Set up parallelization
+    proc_dict = dict()
+    processes = []
     proc_queue = Queue(max_parallel)
     def _deque_proc():
         (old_pid, old_pos) = proc_queue.get()
@@ -289,15 +379,20 @@ def get_student_info_multi(
         if filled_pos >= max_parallel:
             getpos = _deque_proc()
         else:
-            pos = filled_pos + 1 
-        filled_pos += 1
-        p = Process(target=get_student_info_single,
-                    args=[sid, qid, num_samples, dtype, test_label, test_args,
-                          append_samples, pos, proc_queue])
+            pos = filled_pos % max_parallel
+        filled_pos += 1 
+        p = Process(target=monte_carlo_sample_single,
+                    args=[sid, qid, min_n, max_n, dtype, func_name, test_label, test_args,
+                          append_samples, pos, proc_queue, save_samples, scorer, proj_method])
         p.start()
         proc_dict[p.pid] = p
+        processes.append(p) 
 
-    for _ in range(max_parallel):
+    # Wait for all processes to complete
+    for p in processes:
+        p.join()
+
+    while not proc_queue.empty():
         _deque_proc()
             
     
@@ -310,7 +405,7 @@ def get_test_suite(qid, num_tests=20, all_test_suites=False):
     test_suite_dir = os.path.join(DATA_DIR, qid, 'test_suites')
     if not os.path.isdir(test_suite_dir):
         os.mkdir(test_suite_dir)
-        print(f'ERROR: Must initialize the {qid}.py file containing the', 
+        print(f'Must initialize the {qid}.py file containing the', 
               'generate_test_suites() function in the test suite directory.')
         print('If you would like to specify a subset of cases, do so', 
               f'in a {qid}.labels.json file in the test suite directory.')
