@@ -1,9 +1,13 @@
+import argparse
+import configparser
 import json
 import numpy as np
 import os
 
 from stochasticgrade.constants import DATA_DIR
 from stochasticgrade.grade import StochasticGrade
+from stochasticgrade.score import *
+
 
 def initialize(file_path, qid):
     """
@@ -17,7 +21,7 @@ def initialize(file_path, qid):
     
     # Create the directory for the closest error program
     print('Creating the directory for the closest error program.')
-    if not os.isdir(os.path.join(DATA_DIR, qid, 'closest_error', 'closest_error')):
+    if not os.path.isdir(os.path.join(DATA_DIR, qid, 'closest_error', 'closest_error')):
         os.makedirs(os.path.join(DATA_DIR, qid, 'closest_error', 'closest_error'))
         
     # Move the read program into the directory using the sid `closest_error`
@@ -35,14 +39,15 @@ def initialize(file_path, qid):
      
     # Update the config file
     config = configparser.ConfigParser()
-    if os.path.isfile(os.path.join(DATA_DIR, qid, 'config.ini')):   
-        config.read(os.path.join(DATA_DIR, qid, 'config.ini'))
+    if not os.path.isfile(os.path.join(DATA_DIR, qid, 'config.ini')):   
+        raise ValueError('Please ensure the config.ini is in your qid directory!')
+    config.read(os.path.join(DATA_DIR, qid, 'config.ini'))
     config['Parameters']['far'] = far
     with open(os.path.join(DATA_DIR, qid, 'config.ini'), 'w') as f:
         config.write(f)
         
 
-def choose_n(qid, false_acceptance_rate, false_rejection_rate, 
+def choose_n(qid, false_acceptance_rate, false_rejection_rate, num_soln_samples,  
              scorer, dtype, func_name, min_n=200, max_n=500000, M=10, test_label='', test_args=[]):
     """
     Determine the sample size that satisfies the provided FAR when run on
@@ -52,6 +57,7 @@ def choose_n(qid, false_acceptance_rate, false_rejection_rate,
     qid (str):                     the question ID
     false_acceptance_rate (float): the false acceptance rate for the error program
     false_rejection_rate (float):  the false rejection rate for the correct programs
+    num_soln_samples (int):        the number of solution samples
     scorer (Scorer):               the scoring function to use
     dtype (str):                   the data type of the problem
     func_name (str):               the name of the function from which samples are collected
@@ -63,6 +69,8 @@ def choose_n(qid, false_acceptance_rate, false_rejection_rate,
     best_n (int): the number of samples that satisfies the FAR, or max_n if no value is found
     """
     # TODO: Change M back to 1000
+    
+    print('\n- - - - - CHOOSE N - - - - -\n')
     # Determine the sample sizes to evaluate, in powers of 2
     sizes = []
     curr = min_n
@@ -70,14 +78,6 @@ def choose_n(qid, false_acceptance_rate, false_rejection_rate,
         sizes.append(curr)
         curr *= 2
     sizes.append(max_n)
-    
-    # Number of solution samples used
-    soln_sample_path = os.path.join(DATA_DIR, qid, 'solution', 'solution', test_label, 'samples.npy')
-    if os.path.isfile(soln_sample_path):
-        soln_samples = np.load(soln_sample_path, allow_pickle=True)
-    else:
-        raise ValueError('No solution samples found. Be sure to execute preprocess.py!')
-    num_soln_samples = len(soln_samples)
     
     # The ID for the closest error program
     sid = 'closest_error'
@@ -90,18 +90,20 @@ def choose_n(qid, false_acceptance_rate, false_rejection_rate,
                                     num_soln_samples=num_soln_samples, test_label=test_label, test_args=test_args)
         # Run the grading algorithm on the error program M times
         false_acceptances = 0
-        for _ in range(M):
+        for _ in tqdm(range(M)):
             result = algorithm.grade(sid)
             accepted = result[0]
             if accepted: 
                 false_acceptances += 1
-        simulated_far = false_acceptances / M
+        calculated_far = false_acceptances / M
         
         # Determine if the calculated FAR is sufficient or if we need more samples
-        if simulated_far <= false_acceptance_rate:
-            print(f'best_n: {best_n}')
+        if calculated_far <= false_acceptance_rate:
+            print(f'Calculated FAR: {calculated_far} is within the tolerance of {false_acceptance_rate}.\n')
+            print(f'The best value of N: {best_n}\n')
             return best_n
-    print(f'No best_n found within the sample size maximum. Returning max_n of {max_n}.')
+        print(f'Calculated FAR: {calculated_far} is beyond the tolerance of {false_acceptance_rate}.')
+    print(f'\nNo best_n found within the sample size maximum. Returning max_n of {max_n}.\n')
     return best_n
 
 
@@ -117,7 +119,7 @@ if __name__ == '__main__':
     file_path = args.file_path
     
     # Initialize the error program directory and FAR
-    initialize(file_path)
+    initialize(file_path, qid)
     
     # Load config file
     config = configparser.ConfigParser()
@@ -133,14 +135,14 @@ if __name__ == '__main__':
     scorer_map = make_scorer_map()
     scorer = scorer_map[scorer_name]
     func_name = config['Parameters']['func_name']
-    far = config['Parameters']['far']
-    frr = config['Parameters']['frr']
-    
+    far = float(config['Parameters']['far'])
+    frr = float(config['Parameters']['frr'])
+               
     # Run choose_n and save the best selection for the number of samples that obey the FAR
     best_n = choose_n(
-        qid, far, frr, scorer, dtype, func_name, min_n=min_n, max_n=max_n
+        qid, far, frr, num_soln_samples, scorer, dtype, func_name, min_n=min_n, max_n=max_n
     )
-    with open(os.path.join(DATA_DIR, qid, 'closest_error', f'best_n_far={far}.txt')) as f:
+    with open(os.path.join(DATA_DIR, qid, 'closest_error', f'best_n_far={far}.txt'), 'w') as f:
         f.write(f'best_n = {best_n}')
     
                 
