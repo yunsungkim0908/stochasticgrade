@@ -1,16 +1,10 @@
-import argparse
-import ast
 import contextlib
 import io
-import itertools
 import json
 import multiprocessing as mp
 import numpy as np
 import os
-import pickle
-import shutil
 import signal
-import sys
 import time
 import warnings
 
@@ -31,8 +25,24 @@ def get_samples(
     early_stopping=10000, max_timeouts=5, append_samples=False, pos=0, sample_to=None
 ):
     """
-    Sample `num_samples` samples from `prog`. 
-    dtype is either scalar or list.
+    Samples `num_samples` samples from the student program belonging to `sid`. 
+
+    Parameters:
+    sid (str):             the student ID
+    qid (str):             the question ID
+    num_samples (int):     the number of samples to be generated
+    dtype (str):           the data type of the program output
+    func_name (str):       the function to be sampled
+    test_label (str):      the label of the function arguments
+    test_args (list):      the function arguments needed for execution
+    early_stopping (int):  early termination criteria
+    max_timeouts (int):    number of permissible timeouts before termination
+    append_samples (bool): whether to append generated samples to existing samples
+    pos (int):             progress bar position
+    sample_to (int):       sample exactly to the provided number
+
+    Returns: 
+    samples (list): the generated samples
     """
     
     # Load the program from which we will be sampling. If samples already exist,
@@ -87,7 +97,7 @@ def get_samples(
         # Proceed with sampling as normal
         
         start = time.time()
-        val = sample_fn(qid, prog, dtype, func_name, test_args=test_args)
+        val = sample_fn(sid, qid, prog, func_name, test_args=test_args)
         end = time.time()
         
         # Add the newly sampled value(s) to the list of samples
@@ -114,7 +124,6 @@ def get_samples(
             if np.array(val).shape != shape:
                 break
             samples.append(val)
-            
          
         # Update the progress bar if the sample is valid
         if val is not None:
@@ -132,35 +141,73 @@ def get_samples(
     return samples
 
 
-def scalar_sample(qid, prog, dtype, func_name, test_args=[]):
+def scalar_sample(sid, qid, prog, func_name, test_args=[]):
     """
     Execution function for scalar data types.
+
+    Parameters:
+    sid (str):        the student ID
+    qid (str):        the question ID
+    prog (str):       the sampled program
+    func_name (str):  the function to be sampled
+    test_args (list): the function arguments needed for execution
+
+    Returns: 
+    A single sample, obtained from `exec_program`
     """
-    return exec_program(qid, prog, func_name, test_args=test_args)
+    return exec_program(sid, qid, prog, func_name, test_args=test_args)
 
 
-def list_sample(qid, prog, dtype, func_name, test_args=[]):
+def list_sample(sid, qid, prog, func_name, test_args=[]):
     """
     Execution function for list data type.
+
+    Parameters:
+    sid (str):        the student ID
+    qid (str):        the question ID
+    prog (str):       the sampled program
+    func_name (str):  the function to be sampled
+    test_args (list): the function arguments needed for execution
+
+    Returns: 
+    A single sample, obtained from `exec_program`
     """
-    return exec_program(qid, prog, func_name, test_args=test_args, allowed_types=[list])
+    return exec_program(sid, sid, qid, prog, func_name, test_args=test_args, allowed_types=[list])
 
 
-def multidim_sample(qid, prog, dtype, func_name, test_args=[]):
+def multidim_sample(sid, qid, prog, func_name, test_args=[]):
     """
     Execution function for multidimensional data types.
+
+    Parameters:
+    sid (str):        the student ID
+    qid (str):        the question ID
+    prog (str):       the sampled program
+    func_name (str):  the function to be sampled
+    test_args (list): the function arguments needed for execution
+
+    Returns: 
+    A single sample, obtained from `exec_program`
     """
-    return exec_program(qid, prog, func_name, test_args=test_args, allowed_types=[list])
+    return exec_program(sid, qid, prog, func_name, test_args=test_args, allowed_types=[list])
 
 
-def evaluate_student_code(qid, prog, func_name, test_args=[]):
+def evaluate_student_code(sid, qid, prog, func_name, test_args=[]):
     """
     Evaluate the student code in the context of the associated problem
-    environment. Suppress stdout.
+    environment. This generates a single sample if successful.
+
+    Parameters:
+    qid (str):        the question ID
+    prog (str):       the sampled program
+    func_name (str):  the function to be sampled
+    test_args (list): the function arguments needed for execution
+
+    Returns: 
+    val: a single sample
     """
-    
+
     val = None
-    
     try:
         # Redirect output to prevent extraneous printing
         with contextlib.redirect_stdout(io.StringIO()):
@@ -173,19 +220,43 @@ def evaluate_student_code(qid, prog, func_name, test_args=[]):
             else:
                 raise ValueError(f'No function named "{func_name}" found in the code for question {qid}')
     except Exception as e:
-        pass
+        # Save the error
+        path = os.path.join(DATA_DIR, qid, 'results', 'inexecutable_sids.json')
+        if os.path.isfile(path):
+            with open(path) as f:
+                progs = json.load(path)
+        else:
+            progs = {}
+        progs[sid] = e
+        with open(path, 'w') as f:
+            json.dump(progs)
     
     return val
 
 
 def _alarm_handler(signum, frame):
+    """
+    Timeout handler.
+    """
     raise TimeoutError
     
 
-def exec_program(qid, prog, func_name, timeout=1, test_args=[], allowed_types=[]):
+def exec_program(sid, qid, prog, func_name, timeout=1, test_args=[], allowed_types=[]):
     """
     Evaluate the student program and return its return value.
     Return None if student program cannot be evaluated.
+
+    Parameters:
+    sid (str):            the student ID
+    qid (str):            the question ID
+    prog (str):           the sampled program
+    func_name (str):      the function to be sampled
+    timeout (int):        the maximum amount of time to wait for a single sample
+    test_args (list):     the function arguments needed for execution
+    allowed_types (list): legal return value types
+
+    Returns:
+    val: a single sample
     """
 
     val = None
@@ -193,7 +264,7 @@ def exec_program(qid, prog, func_name, timeout=1, test_args=[], allowed_types=[]
     signal.alarm(timeout)
 
     try:  # Attempt to run the program
-        val = evaluate_student_code(qid, prog, func_name, test_args=test_args)
+        val = evaluate_student_code(sid, qid, prog, func_name, test_args=test_args)
     except KeyboardInterrupt:
         raise KeyboardInterrupt
     except Exception:  # Caught an error
@@ -212,7 +283,25 @@ def sample_sid_single(
     append_samples=False, pos=0, proc_queue=None, proj_method='ED', sample_to=None
 ):
     """
-    Sampling process for singlethreaded sampling. 
+    Sampling process for singlethreaded sampling. Generates `num_samples` samples
+    for the program belonging to `sid`.
+
+    Parameters:
+    sid (str):             the student ID
+    qid (str):             the question ID
+    num_samples (int):     the number of samples to be generated
+    dtype (str):           the data type of the program output
+    func_name (str):       the function to be sampled
+    test_label (str):      the label of the function arguments
+    test_args (list):      the function arguments needed for execution
+    append_samples (bool): whether to append generated samples to existing samples
+    pos (int):             progress bar position
+    proc_queue (Queue):    the process queue
+    proj_method (str):     the projection method used for multidimensional samples
+    sample_to (int):       sample exactly to the provided number
+
+    Returns: 
+    None
     """
     
     # Create the appropriate directory name where samples will be stored
@@ -256,6 +345,26 @@ def sample_sid_multi(
     sids, qid, num_samples, dtype, func_name, max_parallel,
     test_label='', test_args=[], append_samples=False, proj_method='ED', sample_to=None
 ):
+    """
+    Sampling process for multithreaded sampling. Generates `num_samples` samples
+    for the programs belonging to `sids`.
+
+    Parameters:
+    sids (list):           a list of student IDs
+    qid (str):             the question ID
+    num_samples (int):     the number of samples to be generated
+    dtype (str):           the data type of the program output
+    func_name (str):       the function to be sampled
+    max_parallel (int):    the maximum number of parallel sampling processes
+    test_label (str):      the label of the function arguments
+    test_args (list):      the function arguments needed for execution
+    append_samples (bool): whether to append generated samples to existing samples
+    proj_method (str):     the projection method used for multidimensional samples
+    sample_to (int):       sample exactly to the provided number
+
+    Returns: 
+    None
+    """
     
     processes = []
     proc_queue = Queue()
@@ -290,7 +399,28 @@ def monte_carlo_sample_single(
     save_samples=False, scorer=None, proj_method='ED'
 ):
     """
-    Sampling process for singlethreaded Monte Carlo sampling. 
+    Sampling process for singlethreaded Monte Carlo sampling. Generates 
+    samples for the program belonging to `sid`. Evaluates scores for various 
+    sample sizes calculated between `min_n` and `max_n`.
+
+    Parameters:
+    sid (str):             the student ID
+    qid (str):             the question ID
+    min_n (int):           the minimum number of samples to score
+    max_n (int):           the maximum number of samples to score
+    dtype (str):           the data type of the program output
+    func_name (str):       the function to be sampled
+    test_label (str):      the label of the function arguments
+    test_args (list):      the function arguments needed for execution
+    append_samples (bool): whether to append generated samples to existing samples
+    pos (int):             progress bar position
+    proc_queue (Queue):    the process queue
+    save_samples (bool):   keep Monte Carlo samples
+    scorer (Scorer):       scoring function
+    proj_method (str):     projection method for multidimensional samples
+
+    Returns: 
+    None
     """
     
     # Create the appropriate directory name where samples will be stored
@@ -355,7 +485,27 @@ def monte_carlo_sample_multi(
         scorer=None, proj_method='ED'
 ):
     """
-    Sampling process for multithreaded Monte Carlo sampling. 
+    Sampling process for multithreaded Monte Carlo sampling. Generates 
+    samples for the programs belonging to `sids`. Evaluates scores for various 
+    sample sizes calculated between `min_n` and `max_n`.
+
+    Parameters:
+    sids (list):           list of student IDs
+    qid (str):             the question ID
+    min_n (int):           the minimum number of samples to score
+    max_n (int):           the maximum number of samples to score
+    dtype (str):           the data type of the program output
+    func_name (str):       the function to be sampled
+    max_parallel (int):    maximum number of parallel sampling processes
+    test_label (str):      the label of the function arguments
+    test_args (list):      the function arguments needed for execution
+    append_samples (bool): whether to append generated samples to existing samples
+    save_samples (bool):   keep Monte Carlo samples
+    scorer (Scorer):       scoring function
+    proj_method (str):     projection method for multidimensional samples
+
+    Returns: 
+    None
     """
     
     processes = []
@@ -384,49 +534,3 @@ def monte_carlo_sample_multi(
     while not proc_queue.empty():
         pid, pos = proc_queue.get()
             
-    
-def get_test_suite(qid, num_tests=20, all_test_suites=False):
-    """
-    Create test suite cases for problems in which multiple sample sets
-    from the same program are useful.
-    """
-    
-    test_suite_dir = os.path.join(DATA_DIR, qid, 'setup', 'test_suites')
-    if not os.path.isdir(test_suite_dir):
-        os.mkdir(test_suite_dir)
-        print(f'Must initialize the {qid}.py file containing the', 
-              'generate_test_suites() function in the test suite directory.')
-        print('If you would like to specify a subset of cases, do so', 
-              f'in a {qid}.labels.json file in the test suite directory.')
-        raise Exception
-        
-    
-    suite_fname = os.path.join(test_suite_dir, f'{qid}.pkl')
-
-    if not os.path.isfile(suite_fname):
-        gen_fname = os.path.join(test_suite_dir, f'{qid}.py')
-        with open(gen_fname) as f:
-            script = f.read()
-        exec(script, locals(), locals())
-
-        test_suites = {}
-        for i in range(num_tests):
-            test_case = locals()['generate_test_suites']()
-            test_label = f'case_{i}'
-            test_suites[test_label] = test_case
-
-        with open(suite_fname, 'wb') as f:
-            pickle.dump(test_suites, f)
-    else:
-        print('loading existing test cases...')
-        with open(suite_fname, 'rb') as f:
-            test_suites = pickle.load(f)
-
-    if not all_test_suites:
-        labels_fname = os.path.join(test_suite_dir, f'{qid}.labels.json')
-        chosen_labels = json.load(open(labels_fname))
-        print('testing a subset of test cases: ', chosen_labels)
-        test_suites = dict((k,v) for k,v in test_suites.items()
-                           if k in chosen_labels)
-    return test_suites
-                                    
