@@ -13,12 +13,12 @@ from tqdm import tqdm
 from stochasticgrade.constants import *
 
 
-def get_euclidean_distance(stud_samples, soln_samples, sid, qid, dilation=1):
+def get_euclidean_distances(stud_samples, soln_samples, sid, qid, dilation=1, test_label=''):
     """
     Measures the Euclidean distance between a randomly selected 
     anchor point (near the solution distribution) and the student samples.
     """
-    anchor_path = os.path.join(DATA_DIR, qid, 'results', 'random_anchor.json')
+    anchor_path = os.path.join(DATA_DIR, qid, 'setup', 'random_anchor.json')
     
     # Sample the random anchor point from a bounding box of the solution samples
     if not os.path.isfile(anchor_path):
@@ -41,7 +41,7 @@ def get_euclidean_distance(stud_samples, soln_samples, sid, qid, dilation=1):
         with open(os.path.join(anchor_path), 'w') as f:
             json.dump(anchor, f)
         soln_dists = np.sqrt(np.sum((soln_samples - anchor) * (soln_samples - anchor), axis=1)) 
-        path = os.path.join(DATA_DIR, qid, 'solution', 'solution', 'euclidean_dists.npy')
+        path = os.path.join(DATA_DIR, qid, 'solution', 'solution', test_label, 'euclidean_distances.npy')
         np.save(path, soln_dists)
         
     with open(os.path.join(anchor_path)) as f:
@@ -51,21 +51,21 @@ def get_euclidean_distance(stud_samples, soln_samples, sid, qid, dilation=1):
     dists = np.sqrt(np.sum((stud_samples - anchor) * (stud_samples - anchor), axis=1))
     
     if 'solution' in sid:
-        id_type = 'solution/mc_solutions' if 'mc_solution' in sid else 'solution'
+        sid_type = 'solution/mc_solutions' if 'mc_solution' in sid else 'solution'
     else:
-        id_type = 'students'
-    path = os.path.join(DATA_DIR, qid, id_type, sid, 'euclidean_dists.npy')
+        sid_type = 'students'
+    path = os.path.join(DATA_DIR, qid, sid_type, sid, 'euclidean_distances.npy')
     np.save(path, dists)
     
     return dists
 
 
-def get_orthogonal_projection(stud_samples, soln_samples, sid, qid):
+def get_orthogonal_projections(stud_samples, soln_samples, sid, qid):
     """
     Calculates the projection of the student samples onto a unit vector
     from the corresponding n-dimensional hypersphere. 
     """
-    vector_path = os.path.join(DATA_DIR, qid, 'results', 'random_unit_vector.json')
+    vector_path = os.path.join(DATA_DIR, qid, 'setup', 'random_unit_vector.json')
     
     # Sample the random unit vector from the hypersphere
     if not os.path.isfile(vector_path):
@@ -81,7 +81,7 @@ def get_orthogonal_projection(stud_samples, soln_samples, sid, qid):
         with open(os.path.join(vector_path), 'w') as f:
             json.dump(unit_vector.tolist(), f)
         soln_dists = np.dot(soln_samples, unit_vector)
-        path = os.path.join(DATA_DIR, qid, 'solution', 'solution', 'projection_dists.npy')
+        path = os.path.join(DATA_DIR, qid, 'solution', 'solution', test_label, 'orthogonal_projections.npy')
         np.save(path, soln_dists)
         
     with open(os.path.join(vector_path)) as f:
@@ -91,10 +91,10 @@ def get_orthogonal_projection(stud_samples, soln_samples, sid, qid):
     dists = np.dot(stud_samples, unit_vector)
     
     if 'solution' in sid:
-        id_type = 'solution/mc_solutions' if 'mc_solution' in sid else 'solution'
+        sid_type = 'solution/mc_solutions' if 'mc_solution' in sid else 'solution'
     else:
-        id_type = 'students'
-    path = os.path.join(DATA_DIR, qid, id_type, sid, 'projection_dists.npy')
+        sid_type = 'students'
+    path = os.path.join(DATA_DIR, qid, sid_type, sid, 'orthogonal_projections.npy')
     np.save(path, dists)
     
     return dists
