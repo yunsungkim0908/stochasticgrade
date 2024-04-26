@@ -20,29 +20,49 @@ def load_qid_data(file_path, qid):
                       - one of the following formats for student data:
                           - [sid].py files directly within the `file_path` directory
                           - a .json file containing sid (str): program (str) mappings
-    qid (str):                the question ID
+                          
+                      OPTIONAL:
+                      - closest_error.py: the closest acceptable error program to the solution
+                        (this is used if trying to adjust the false acceptance rate)
+                      - grading_arguments.json: a .json file containing the arguments needed to run
+                        the function to be graded. It is a mapping between variable names and the argument.
+                        The variables must be in the same order.
+                      
+    qid (str):        the question ID
     
     Returns: 
     None
     """
     
-    print('\n- - - - - DATA PROCESSING - - - - -\n')
+    print('\n\n- - - - - DATA PROCESSING - - - - -\n')
+    
     # Create the question ID directory, if it doesn't exist
     print('Creating the question ID directory.')
     if not os.path.isdir(os.path.join(DATA_DIR, qid)):
         os.makedirs(os.path.join(DATA_DIR, qid))
         
-    # Create the config file
-    print('Creating config file in the question ID directory.')
-    print('These parameters can be adjusted according to the problem being evaluated.\n')
-    if not os.path.isfile(os.path.join(DATA_DIR, qid, 'config.ini')):
-        create_config_file(os.path.join(DATA_DIR, qid, 'config.ini'))
+    # Create results directory
+    print('Creating results directory.')
+    if not os.path.isdir(os.path.join(DATA_DIR, qid, 'results')):
+        os.makedirs(os.path.join(DATA_DIR, qid, 'results'))
+        
+    # Create setup directory
+    print('Creating setup directory.')
+    if not os.path.isdir(os.path.join(DATA_DIR, qid, 'setup')):
+        os.makedirs(os.path.join(DATA_DIR, qid, 'setup'))
     
     # Check the validity of the provided file path
     if not os.path.exists(file_path):
         raise ValueError(f'The file path "{file_path}" does not exist. Please enter a valid file path.')
     if not os.path.isdir(file_path):
         raise ValueError(f'Please ensure the file path "{file_path}" is a directory.')
+        
+    # Load grading arguments
+    if 'grading_arguments.json' in os.listdir(file_path):
+        print('Loading in the grading arguments.')
+        src = os.path.join(file_path, 'grading_arguments.json')
+        dst = os.path.join(DATA_DIR, qid, 'setup', 'grading_arguments.json')
+        shutil.copy(src, dst)      
     
     # Load solution program data
     print('Loading in the solution program data.')
@@ -55,11 +75,9 @@ def load_qid_data(file_path, qid):
     print('Loading in the student program data.')
     student_programs = {}     
     for item in os.listdir(file_path): 
-        if item == 'solution.py':
+        if item in ['solution.py', 'closest_error.py', 'grading_arguments.json']:
             continue
         if item.endswith('.json'):  # Student data formatted as a .json file
-            if len(os.listdir(file_path)) > 2:
-                raise ValueError(f'Student data must be formatted as a .json file or as separate [sid].py files.')
             data = json.load(open(os.path.join(file_path, item)))
             student_programs = {sid: data[sid] for sid in data}
         if item.endswith('.py'):  # Student data formatted as [sid].py files
@@ -74,6 +92,16 @@ def load_qid_data(file_path, qid):
         os.makedirs(soln_dir)
     with open(os.path.join(soln_dir, 'program.py'), 'w') as f:
         f.write(solution_program)
+                  
+    # Create the closest error directory with its program
+    if 'closest_error.py' in os.listdir(file_path):
+        print('Loading in the closest error program.')
+        if not os.path.isdir(os.path.join(DATA_DIR, qid, 'setup', 'closest_error')):
+            os.makedirs(os.path.join(DATA_DIR, qid, 'setup', 'closest_error'))
+        with open(os.path.join(file_path, 'closest_error.py')) as f:
+            error_program = f.read()
+        with open(os.path.join(DATA_DIR, qid, 'setup', 'closest_error', 'program.py'), 'w') as f:
+            f.write(error_program)
     
     # Create the student ID directories with their programs
     for sid in student_programs: 
@@ -82,12 +110,8 @@ def load_qid_data(file_path, qid):
             os.makedirs(sid_dir)
         with open(os.path.join(sid_dir, 'program.py'), 'w') as f:   
             f.write(student_programs[sid])
-    
-    # Create results directory
-    print('Creating results directory.')
-    if not os.path.isdir(os.path.join(DATA_DIR, qid, 'results')):
-        os.makedirs(os.path.join(DATA_DIR, qid, 'results'))
-    print('Success!\n')
+        
+    print('Success!\n\n')
     
     
 def sample_solution(qid, n_samples, dtype, func_name, test_label='', test_args=[]):
@@ -106,7 +130,7 @@ def sample_solution(qid, n_samples, dtype, func_name, test_label='', test_args=[
     None
     """
     
-    print('\n- - - - - SOLUTION SAMPLE GENERATION - - - - -\n')
+    print('- - - - - SOLUTION SAMPLE GENERATION - - - - -\n')
     
     # Generate the solution samples
     print(f'Generating {n_samples} samples from the solution program.')
@@ -114,7 +138,11 @@ def sample_solution(qid, n_samples, dtype, func_name, test_label='', test_args=[
     sample_sid_single(sid, qid, n_samples, dtype, func_name, test_label=test_label, test_args=test_args)  
     sample_path = os.path.join(DATA_DIR, qid, 'solution', sid, test_label, 'samples.npy')
     samples = np.load(sample_path, allow_pickle=True)
-    print(f'Succesfully generated {len(samples)} solution samples!\n')
+    if len(samples) == 0:
+        os.remove(sample_path)
+        raise Exception('Did not successfully generate samples. Did you correct specify all model parameters?')
+    else:
+        print(f'Succesfully generated {len(samples)} solution samples!\n\n')
     
     
 def monte_carlo(min_n, max_n, qid, dtype, func_name, scorer, M=1000, max_parallel=20, 
@@ -145,7 +173,7 @@ def monte_carlo(min_n, max_n, qid, dtype, func_name, scorer, M=1000, max_paralle
     
     # TODO: Change M back to 1000
     
-    print('\n- - - - - MONTE CARLO SAMPLING - - - - -\n')
+    print('- - - - - MONTE CARLO SAMPLING - - - - -\n')
     
     # Generate IDs for Monte Carlo sampling and generate samples and scores
     print(f'Generating {M} sample sets of size {max_n} and computing their scores.')
@@ -168,7 +196,7 @@ def monte_carlo(min_n, max_n, qid, dtype, func_name, scorer, M=1000, max_paralle
     print('\nAccumulating scores across all sample sets.')
     scores = {size: [] for size in sizes}
     for sid in tqdm(sids):
-        sid_scores = json.load(open(os.path.join(DATA_DIR, qid, 'solution', 'mc_solutions', sid, 
+        sid_scores = json.load(open(os.path.join(DATA_DIR, qid, 'solution', 'mc_solutions', sid, test_label,
                                                  f'mc_scores_{str(scorer)}{proj_method}.json'))
         )
         for size in sizes:
@@ -177,122 +205,98 @@ def monte_carlo(min_n, max_n, qid, dtype, func_name, scorer, M=1000, max_paralle
     for size in tqdm(scores):
         scores[size].sort()
     with open(os.path.join(
-        DATA_DIR, qid, 'solution', 'mc_solutions', f'mc_scores_{str(scorer)}{proj_method}.json'), 'w'
+        DATA_DIR, qid, 'solution', 'mc_solutions', test_label, f'mc_scores_{str(scorer)}{proj_method}.json'), 'w'
              ) as f:
         json.dump(scores, f)
     if not save_samples:
         print('Clearing individual score sets.')
         for sid in tqdm(sids):
             shutil.rmtree(os.path.join(DATA_DIR, qid, 'solution', 'mc_solutions', sid))
-    print('Success!\n')
-    
-
-def create_config_file(file_path):
-    """
-    Creates a config.ini file with the specified contents at the given file path.
-    
-    file_path (str): the path at which the config file will be created
-    """
-    
-    config = configparser.ConfigParser()
-    
-    print('CONFIG SETUP\n')
-    
-    print('Select the data type.')
-    print('(1) scalar:   for single values')
-    print('(2) list:     for lists (concatenated into one distribution)')
-    print('(3) multidim: for higher dimensional arrays\n')
-    dtype = input('Select one of the options: ')
-    while dtype not in ['1', '2', '3']:
-        dtype = input('Please select a valid option (1, 2, or 3): ')
-        
-    if dtype == '1':
-        dtype = 'scalar'
-    elif dtype == '2':
-        dtype = 'list'
-    else:
-        print('\nEnter the shape of the output array for the problem.')
-        print('e.g. (3, 5) for output of shape (3, 5)')
-        shape = input('Shape tuple: ')
-        # TODO: Check if it's a valid shape tuple, etc
-        dtype = f'array_shape_{shape}'
-        
-    print('\nSelect the false rejection rate.')
-    print('This is a float, e.g. 0.01.')
-    frr = input('FRR: ')
-    
-    print('\nSelect the number of solution samples.')
-    print('This is an int, e.g. 500000.')
-    num_soln_samples = input('Number of samples: ')
-    
-    print('\nSelect the minimum number of student samples used for grading.')
-    print('This is an int, e.g. 200.')
-    min_n = input('Minimum number of samples: ')
-    
-    print('\nSelect the maximum number of student samples used for grading.')
-    print('This is an int, e.g. 500000.')
-    print('Note: the choose_n.py script can help to determine this value.')
-    max_n = input('Maximum number of samples: ')
-    
-    print('\nSelect the scoring function.')
-    print('Pre-existing options: TScorer, MSDScorer, AndersonDarlingScorer, WassersteinScorer.')
-    scorer = input('Scorer: ')
-    
-    print('\nSelect the maximum number of parallel processes for sampling.')
-    print('This is an int, e.g. 50')
-    max_parallel = input('Max parallel: ')
-    
-    print('\nWrite the name of the function to be executed for grading.')
-    print('This is a string, e.g. myFunction')
-    func_name = input('Function name: ')
-    
-    # Set the parameters in the file
-    config['Parameters'] = {
-        'dtype': dtype,
-        'frr': frr, 
-        'num_soln_samples': num_soln_samples,
-        'min_n': min_n,
-        'max_n': max_n,
-        'scorer': scorer, 
-        'max_parallel': max_parallel,
-        'func_name': func_name
-    }
-    
-    print('\n')
-    with open(file_path, 'w') as f:
-        config.write(f)
+    print('Success!\n\n')
     
 
 if __name__ == '__main__':
     
+    # Load in command line arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('qid', type=str)
     parser.add_argument('file_path', type=str)
-    args = parser.parse_args()
+    parser.add_argument('func_name', type=str)
     
+    # Model parameter arguments
+    parser.add_argument('--dtype', type=str, default='scalar')
+    parser.add_argument('--far', type=float, default=None)
+    parser.add_argument('--frr', type=float, default=0.01)
+    parser.add_argument('--max_n', type=int, default=409600)
+    parser.add_argument('--min_n', type=int, default=400)
+    parser.add_argument('--n_scale_factor', type=int, default=4)
+    parser.add_argument('--n_soln_samples', type=int, default=500000)
+    parser.add_argument('--scorer', type=str, default='AndersonDarlingScorer')
+    parser.add_argument('--M', type=int, default=1000)
+    parser.add_argument('--max_parallel', type=int, default=20)
+    parser.add_argument('--proj_method', type=str, default=None)
+    
+    args = parser.parse_args()
     qid = args.qid
     file_path = args.file_path
-    
+
     # Load in the student and solution data
     load_qid_data(file_path, qid)
     
-    # Load config file
+    # Save parameters to editable config.ini file
     config = configparser.ConfigParser()
-    if os.path.isfile(os.path.join(DATA_DIR, qid, 'config.ini')):   
-        config.read(os.path.join(DATA_DIR, qid, 'config.ini'))
-       
-    # Load model parameters
+    config['Parameters'] = {
+        'dtype': args.dtype,
+        'func_name': args.func_name,
+        'frr': args.frr,
+        'max_n': args.max_n,
+        'min_n': args.min_n,
+        'n_scale_factor': args.n_scale_factor,
+        'n_soln_samples': args.n_soln_samples,        
+        'scorer': args.scorer
+    }
+    if args.proj_method in ['ED', 'OP']:
+        config['Parameters']['proj_method'] = args.proj_method
+    elif 'array' in args.dtype and args.proj_method is not None:
+        config['Parameters']['proj_method'] = 'ED'
+                
+    if args.far is not None: 
+        config['Parameters']['far'] = args.far
+    elif os.path.isfile(os.path.join(DATA_DIR, qid, 'closest_error', 'closest_error', 'program.py')):
+        config['Parameters']['far'] = 0.01
+        
+    config_path = os.path.join(DATA_DIR, qid, 'setup', 'config.ini')
+    with open(config_path, 'w') as f:
+        config.write(f)
+    
+    # Set model parameters to variables
+    config = configparser.ConfigParser()
+    if os.path.isfile(os.path.join(DATA_DIR, qid, 'setup', 'config.ini')):   
+        config.read(os.path.join(DATA_DIR, qid, 'setup', 'config.ini'))
+        
     dtype = config['Parameters']['dtype']
-    num_soln_samples = int(config['Parameters']['num_soln_samples'])
-    min_n = int(config['Parameters']['min_n'])
+    func_name = config['Parameters']['func_name']
     max_n = int(config['Parameters']['max_n'])
+    min_n = int(config['Parameters']['min_n'])
+    n_soln_samples = int(config['Parameters']['n_soln_samples'])
     scorer_name = config['Parameters']['scorer']
     scorer_map = make_scorer_map()
     scorer = scorer_map[scorer_name]
-    func_name = config['Parameters']['func_name']
+    
+    # Determine whether we use function arguments
+    args_path = os.path.join(DATA_DIR, qid, 'setup', 'grading_arguments.json')
+    if os.path.isfile(args_path):
+        with open(os.path.join(args_path)) as f:
+            test_label = 'grading_case'
+            test_args = json.load(f)
+    else:
+        test_label = ''
+        test_args = []
 
     # Sample from the solution program
-    sample_solution(qid, num_soln_samples, dtype, func_name)
+    sample_solution(qid, n_soln_samples, dtype, func_name, test_label=test_label, test_args=test_args)
     
     # Generate Monte Carlo samples and scores
-    monte_carlo(min_n, max_n, qid, dtype, func_name, scorer, M=10)
+    if scorer.monte_carlo:
+        monte_carlo(min_n, max_n, qid, dtype, func_name, scorer, M=args.M, max_parallel=args.max_parallel,
+                   test_label=test_label, test_args=test_args)
