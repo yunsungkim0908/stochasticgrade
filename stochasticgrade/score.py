@@ -51,6 +51,7 @@ class AndersonDarlingScorer(Scorer):
     """
     def __init__(self):
         super().__init__()
+        self.monte_carlo = False
 
     def __str__(self):
         return 'AndersonDarlingScorer'
@@ -106,6 +107,7 @@ class MSDScorer(Scorer):
     def __init__(self):
         super().__init__()
         self.soln_var_term = None
+        self.monte_carlo = True
 
     def __str__(self):
         return 'MSDScorer'
@@ -119,14 +121,8 @@ class MSDScorer(Scorer):
         return score
     
     def rejection_threshold(self, frr, num_stud_samples, num_soln_samples, monte_carlo_path=None):
-        if not os.path.isfile(monte_carlo_path):
-            print('\nERROR: Must perform Monte Carlo sampling (mode: --monte-carlo)!\n')
-            raise Exception
         with open(monte_carlo_path) as f:
             scores = json.load(f)
-            if str(num_stud_samples) not in scores.keys():
-                print('\nERROR: Must perform Monte Carlo sampling! (Uncomputed sample size)\n')
-                raise Exception
         scores = scores[str(num_stud_samples)]
         scores.sort()
         scores.reverse()
@@ -143,6 +139,7 @@ class TScorer(Scorer):
     """
     def __init__(self):
         super().__init__()
+        self.monte_carlo = False
 
     def __str__(self):
         return 'TClusterScorer'
@@ -167,6 +164,7 @@ class WassersteinScorer(Scorer):
     """
     def __init__(self):
         super().__init__()
+        self.monte_carlo = True
         
     def __str__(self):
         return 'WassersteinScorer'
@@ -178,14 +176,8 @@ class WassersteinScorer(Scorer):
         return score
     
     def rejection_threshold(self, frr, num_stud_samples, num_soln_samples, monte_carlo_path=None):
-        if not os.path.isfile(monte_carlo_path):
-            print('\nERROR: Must perform Monte Carlo sampling (mode: --monte-carlo)!\n')
-            raise Exception
         with open(monte_carlo_path) as f:
             scores = json.load(f)
-            if str(num_stud_samples) not in scores.keys():
-                print('\nERROR: Must perform Monte Carlo sampling! (Uncomputed sample size)\n')
-                raise Exception
         scores = scores[str(num_stud_samples)]
         scores.sort()
         scores.reverse()
