@@ -60,7 +60,7 @@ def get_euclidean_distances(stud_samples, soln_samples, sid, qid, dilation=1, te
     return dists
 
 
-def get_orthogonal_projections(stud_samples, soln_samples, sid, qid):
+def get_orthogonal_projections(stud_samples, soln_samples, sid, qid, test_label=''):
     """
     Calculates the projection of the student samples onto a unit vector
     from the corresponding n-dimensional hypersphere. 
@@ -98,39 +98,3 @@ def get_orthogonal_projections(stud_samples, soln_samples, sid, qid):
     np.save(path, dists)
     
     return dists
-
-
-def agglomerative(score_list, n_clusters=20):    
-    """
-    Performs agglomerative hierarchical clustering, creating `n_clusters` total.
-    Accepts a score_list: a list of lists of scores for various scorers.
-    Returns the cluster labels.
-    """
-    scores = np.column_stack(score_list)
-    
-    print('Performing agglomerative hierarchical clustering...')    
-    algorithm = sklearn.cluster.AgglomerativeClustering(n_clusters=n_clusters)
-    cluster_labels = algorithm.fit_predict(scores)
-    print('Done.')
-    return cluster_labels
-
-
-def mean_shift(scores, bandwidth=5):
-    """
-    Performs mean shift clustering.
-    Accepts a score_list: a list of lists of scores for various scorers.
-    Returns the cluster labels. 
-    """
-    data = []
-    for i in range(len(score_list[0])):
-        example = []
-        for j in range(len(score_list)):
-            example.append(score_list[j][i])
-        data.append(np.array(example))
-    scores = np.array(data)
-    
-    print('Performing mean shift clustering...')
-    algorithm = sklearn.cluster.MeanShift(bandwidth=bandwidth)
-    cluster_labels = algorithm.fit_predict(scores.reshape(-1, 1))
-    print('Done.')
-    return cluster_labels
