@@ -1,15 +1,10 @@
 import inspect
 import json
 import numpy as np
-import os
-import pickle
 import scipy
 import scipy.stats as stats
-import time
 
 from abc import ABC, abstractmethod
-from copy import deepcopy
-from tqdm import tqdm
 
 from stochasticgrade.constants import *
 
@@ -57,9 +52,9 @@ class AndersonDarlingScorer(Scorer):
         return 'AndersonDarlingScorer'
 
     def compute_score(self, stud_samples, soln_samples):
-        samples = np.array([soln_samples, stud_samples])
-        np.random.shuffle(samples)
-        score = stats.anderson_ksamp(samples).statistic
+        np.random.shuffle(soln_samples)
+        np.random.shuffle(stud_samples)
+        score = stats.anderson_ksamp([soln_samples, stud_samples]).statistic
         return score
     
     def rejection_threshold(self, frr, num_stud_samples, num_soln_samples, monte_carlo_path=None):
@@ -142,7 +137,7 @@ class TScorer(Scorer):
         self.monte_carlo = False
 
     def __str__(self):
-        return 'TClusterScorer'
+        return 'TScorer'
 
     def compute_score(self, stud_samples, soln_samples):
         ttest = stats.ttest_ind(stud_samples, soln_samples)
