@@ -5,6 +5,8 @@ import numpy as np
 import os
 import shutil
 
+from tqdm import tqdm
+
 from stochasticgrade.constants import DATA_DIR
 from stochasticgrade.sample import sample_sid_single, sample_sid_multi, monte_carlo_sample_multi
 from stochasticgrade.score import *
@@ -172,8 +174,6 @@ def monte_carlo(min_n, max_n, qid, dtype, func_name, scorer, M=1000, max_paralle
     None
     """
     
-    # TODO: Change M back to 1000
-    
     print('- - - - - MONTE CARLO SAMPLING - - - - -\n')
     
     # Generate IDs for Monte Carlo sampling and generate samples and scores
@@ -208,7 +208,7 @@ def monte_carlo(min_n, max_n, qid, dtype, func_name, scorer, M=1000, max_paralle
     with open(os.path.join(
         DATA_DIR, qid, 'solution', 'mc_solutions', test_label, f'mc_scores_{str(scorer)}{proj_method}.json'), 'w'
              ) as f:
-        json.dump(scores, f)
+        json.dump(scores, f, indent=4)
     if not save_samples:
         print('Clearing individual score sets.')
         for sid in tqdm(sids):
@@ -233,6 +233,7 @@ if __name__ == '__main__':
     parser.add_argument('--n_scale_factor', type=int, default=4)
     parser.add_argument('--n_soln_samples', type=int, default=500000)
     parser.add_argument('--scorer', type=str, default='AndersonDarlingScorer')
+    parser.add_argument('--save_mc_samples', action='store_true')
     parser.add_argument('--M', type=int, default=1000)
     parser.add_argument('--max_parallel', type=int, default=20)
     parser.add_argument('--proj_method', type=str, default=None)
@@ -263,8 +264,8 @@ if __name__ == '__main__':
                 
     if args.far is not None: 
         config['Parameters']['far'] = args.far
-    elif os.path.isfile(os.path.join(DATA_DIR, qid, 'closest_error', 'closest_error', 'program.py')):
-        config['Parameters']['far'] = 0.01
+    else:
+        config['Parameters']['far'] = '0.01'
         
     config_path = os.path.join(DATA_DIR, qid, 'setup', 'config.ini')
     with open(config_path, 'w') as f:
@@ -300,4 +301,4 @@ if __name__ == '__main__':
     # Generate Monte Carlo samples and scores
     if scorer.monte_carlo:
         monte_carlo(min_n, max_n, qid, dtype, func_name, scorer, M=args.M, max_parallel=args.max_parallel,
-                   test_label=test_label, test_args=test_args)
+                   test_label=test_label, test_args=test_args, save_samples=args.save_mc_samples)
