@@ -1,7 +1,5 @@
 import argparse
 import configparser
-import json
-import numpy as np
 import os
 import shutil
 
@@ -11,7 +9,7 @@ from stochasticgrade.score import *
         
 
 def choose_n(qid, false_acceptance_rate, false_rejection_rate, n_soln_samples,  
-             scorer, dtype, func_name, min_n, max_n, M=1000):
+             scorer, dtype, func_name, min_n, max_n, M=1000, max_parallel=20, proj_method='ED'):
     """
     Determine the sample size that satisfies the provided FAR when run on
     the closest error program. Out of `M` identical error programs, only a
@@ -27,11 +25,12 @@ def choose_n(qid, false_acceptance_rate, false_rejection_rate, n_soln_samples,
     min_n (int):                   the minimum number of samples to test
     max_n (int):                   the maximum number of samples to test
     M (int):                       the number of times to execute the grading algorithm
+    max_parallel (int):            the maximum number of parallel processes for grading
+    proj_method (str):             the projection method used for multidimensional samples
     
     Returns: 
     best_n (int): the number of samples that satisfies the FAR, or max_n if no value is found
     """
-    # TODO: Change M back to 1000
     
     print('\n- - - - - CHOOSE N - - - - -\n')
     # Determine the sample sizes to evaluate, in powers of 2
@@ -58,10 +57,10 @@ def choose_n(qid, false_acceptance_rate, false_rejection_rate, n_soln_samples,
         print(f'Testing size {size}')
         best_n = size
         algorithm = StochasticGrade(qid, scorer, [size], false_rejection_rate, dtype, func_name,
-                                    n_soln_samples=n_soln_samples)
+                                    n_soln_samples=n_soln_samples, proj_method=proj_method)
         # Run the grading algorithm on the error program M times
         false_acceptances = 0    
-        results = algorithm.grade_parallel(sids)
+        results = algorithm.grade_parallel(sids, max_parallel=max_parallel)
         for sid in results:
             false_acceptances += 1 if results[sid][0] else 0
         calculated_far = false_acceptances / M
@@ -94,11 +93,14 @@ if __name__ == '__main__':
     parser.add_argument('--far', type=float, default=0.1, help='the false acceptance rate')
     parser.add_argument('--M', type=int, default=1000, 
                         help='the number of times to execute the grading algorithm to check FAR')
+    parser.add_argument('--max_parallel', type=int, default=20, 
+                        help='the maximum number of parallel processes for grading')
     args = parser.parse_args()
     
     qid = args.qid
     far = args.far
     M = args.M
+    max_parallel = args.max_parallel
     
     # Load config file
     config = configparser.ConfigParser()
@@ -115,10 +117,15 @@ if __name__ == '__main__':
     scorer = scorer_map[scorer_name]
     func_name = config['Parameters']['func_name']
     frr = float(config['Parameters']['frr'])
+    if 'proj_method' in config['Parameters'].keys():
+        proj_method = config['Parameters']['proj_method']
+    else:
+        proj_method = None
                
     # Run choose_n and save the best selection for the number of samples that obey the FAR
     best_n = choose_n(
-        qid, far, frr, n_soln_samples, scorer, dtype, func_name, min_n, max_n, M=M
+        qid, far, frr, n_soln_samples, scorer, dtype, func_name, min_n, max_n, 
+        M=M, max_parallel=max_parallel, proj_method=proj_method
     )
     with open(os.path.join(DATA_DIR, qid, 'setup', f'best_n_far={far}.txt'), 'w') as f:
         f.write(f'best_n={best_n}')
