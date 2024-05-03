@@ -22,7 +22,8 @@ warnings.filterwarnings('ignore')
 
 def get_samples(
     sid, qid, num_samples, dtype, func_name, test_label='', test_args=[],
-    early_stopping=10000, max_timeouts=5, append_samples=False, pos=0, sample_to=None
+    early_stopping=10000, max_timeouts=5, append_samples=False, pos=0, sample_to=None,
+    show_progress=True, long_sampling_time=60
 ):
     """
     Samples `num_samples` samples from the student program belonging to `sid`. 
@@ -73,18 +74,30 @@ def get_samples(
         
     # Set up progress bar and error handling
     pid = os.getpid()
-    pbar = tqdm(range(num_samples), leave=False, position=pos,
+
+    if show_progress: 
+        pbar = tqdm(range(num_samples), leave=False, position=pos,
                 dynamic_ncols=True, nrows=20, postfix=f'{pid}')
+    else:
+        pbar = None
     def sigterm_handler(_signo, _stack_frame):
-        pbar.close()
+        if pbar:
+            pbar.close()
         return None, []
     signal.signal(signal.SIGTERM, sigterm_handler)
     
     timeout_cnt = 0
     samples_remaining = num_samples if sample_to is None else sample_to - len(samples)
+
+    sampling_time = time.time()
     
     # Begin sampling
     while samples_remaining > 0:
+
+        # TODO: Do we want this?
+        # if time.time() - sampling_time > long_sampling_time:
+        #     print(f'Still sampling for sid {sid} after {long_sampling_time} seconds. Consider inspecting the program.')
+        #     sampling_time = time.time()
         
         # Check for early stopping (timeouts or degenerate distributions)
         if timeout_cnt > max_timeouts:
@@ -128,16 +141,20 @@ def get_samples(
         # Update the progress bar if the sample is valid
         if val is not None:
             if dtype == 'scalar':
-                pbar.update(1)
+                if pbar:
+                    pbar.update(1)
                 samples_remaining -= 1
             if dtype == 'list':
-                pbar.update(min(len(val), samples_remaining))
+                if pbar:
+                    pbar.update(min(len(val), samples_remaining))
                 samples_remaining -= len(val)
-            if 'array_shape_' in dtype:
-                pbar.update(1)
+            if 'array' in dtype:
+                if pbar:
+                    pbar.update(1)
                 samples_remaining -= 1
     
-    pbar.close()
+    if pbar:
+        pbar.close()
     return samples
 
 
@@ -172,7 +189,7 @@ def list_sample(sid, qid, prog, func_name, test_args=[]):
     Returns: 
     A single sample, obtained from `exec_program`
     """
-    return exec_program(sid, sid, qid, prog, func_name, test_args=test_args, allowed_types=[list])
+    return exec_program(sid, qid, prog, func_name, test_args=test_args, allowed_types=[list])
 
 
 def multidim_sample(sid, qid, prog, func_name, test_args=[]):
@@ -229,7 +246,7 @@ def evaluate_student_code(sid, qid, prog, func_name, test_args=[]):
             progs = {}
         progs[sid] = e
         with open(path, 'w') as f:
-            json.dump(progs)
+            json.dump(progs, f, indent=4)
     
     return val
 
@@ -280,7 +297,8 @@ def exec_program(sid, qid, prog, func_name, timeout=1, test_args=[], allowed_typ
 
 def sample_sid_single(
     sid, qid, num_samples, dtype, func_name, test_label='', test_args=[], 
-    append_samples=False, pos=0, proc_queue=None, proj_method='ED', sample_to=None
+    append_samples=False, pos=0, proc_queue=None, proj_method='ED', sample_to=None,
+    show_progress=True
 ):
     """
     Sampling process for singlethreaded sampling. Generates `num_samples` samples
@@ -321,7 +339,8 @@ def sample_sid_single(
 
         samples = get_samples(
             sid, qid, num_samples, dtype, func_name, test_label=test_label, 
-            test_args=test_args, append_samples=append_samples, pos=pos, sample_to=sample_to
+            test_args=test_args, append_samples=append_samples, pos=pos, sample_to=sample_to,
+            show_progress=show_progress
         )
         
         # Save the samples
@@ -343,7 +362,8 @@ def sample_sid_single(
         
 def sample_sid_multi(
     sids, qid, num_samples, dtype, func_name, max_parallel,
-    test_label='', test_args=[], append_samples=False, proj_method='ED', sample_to=None
+    test_label='', test_args=[], append_samples=False, proj_method='ED', sample_to=None,
+    show_progress=True
 ):
     """
     Sampling process for multithreaded sampling. Generates `num_samples` samples
@@ -365,32 +385,36 @@ def sample_sid_multi(
     Returns: 
     None
     """
-    
-    processes = []
-    proc_queue = Queue()
+
+    # Set up parallelization
+    proc_dict = dict()
+    proc_queue = Queue(max_parallel)
+    filled_pos = 0
     pbar = tqdm(sids, total=len(sids), dynamic_ncols=True, nrows=20)
 
-    for i, sid in enumerate(pbar):
-        if len(processes) >= max_parallel:
-            p = processes.pop(0)
-            p.join()
-            while not proc_queue.empty():
-                pid, pos = proc_queue.get()  # Handling additional positional data from queue
-        
-        # Start a new process for each sid
+    # Handle dequeueing 
+    def _dequeue_proc():
+        (old_pid, old_pos) = proc_queue.get()
+        old_proc = proc_dict[old_pid]
+        old_proc.join()
+        old_proc.close()
+        return old_pos
+
+    # Begin sampling for each sid
+    for sid in pbar:
+        if filled_pos >= max_parallel:
+            pos = _dequeue_proc()
+        else:
+            pos = filled_pos + 2
+        filled_pos += 1
         p = Process(target=sample_sid_single,
                     args=[sid, qid, num_samples, dtype, func_name, test_label, test_args,
-                          append_samples, i % max_parallel + 1, proc_queue, proj_method, sample_to])
+                          append_samples, pos, proc_queue, proj_method, sample_to, show_progress])
         p.start()
-        processes.append(p)
+        proc_dict[p.pid] = p
 
-    # Ensure all remaining processes are completed
-    for p in processes:
-        p.join()
-
-    # Process remaining items in the queue if any
-    while not proc_queue.empty():
-        pid, pos = proc_queue.get()
+    for _ in range(max_parallel):
+        _dequeue_proc()
         
         
 def monte_carlo_sample_single(
@@ -429,13 +453,15 @@ def monte_carlo_sample_single(
     if not os.path.isdir(dirname):
         os.makedirs(dirname)
     
-    # If samples already exist or we don't want to append, don't do anything
-    if not os.path.isfile(sample_path) or append_samples:
-
+    # If samples already exist and we don't want to append, don't sample
+    if os.path.isfile(sample_path) and not append_samples:
+        samples = np.load(sample_path)
+    else:
         samples = get_samples(
             sid, qid, max_n, dtype, func_name, test_label=test_label, 
             test_args=test_args, append_samples=append_samples, pos=pos
         )
+        samples = np.array(samples)
         
         if save_samples:
             np.save(sample_path, np.array(samples)) 
@@ -455,7 +481,6 @@ def monte_carlo_sample_single(
     
     # Determine whether to use the samples themselves (1D samples) or their projections
     # (multidimensional samples) for computing the score
-    samples = np.array(samples)
     if 'array' in dtype:
         if proj_method == 'OP':  # Assuming Orthogonal Projection method
             stud_dists = get_orthogonal_projections(samples, soln_samples, sid, qid, test_label)
@@ -473,7 +498,7 @@ def monte_carlo_sample_single(
         score = scorer.compute_score(stud_dists[:size], soln_dists)
         scores[size] = score
     with open(save_path, 'w') as f:
-        json.dump(scores, f)
+        json.dump(scores, f, indent=4)
         
     if proc_queue is not None:
         proc_queue.put((mp.current_process().pid, pos))
@@ -507,30 +532,34 @@ def monte_carlo_sample_multi(
     Returns: 
     None
     """
-    
-    processes = []
-    proc_queue = Queue()
+
+    # Set up parallelization
+    proc_dict = dict()
+    proc_queue = Queue(max_parallel)
+    filled_pos = 0
     pbar = tqdm(sids, total=len(sids), dynamic_ncols=True, nrows=20)
 
-    for i, sid in enumerate(pbar):
-        if len(processes) >= max_parallel:
-            p = processes.pop(0)
-            p.join()
-            while not proc_queue.empty():
-                pid, pos = proc_queue.get()  # Handling additional positional data from queue
-        
-        # Start a new process for each sid
+    # Handle dequeueing 
+    def _dequeue_proc():
+        (old_pid, old_pos) = proc_queue.get()
+        old_proc = proc_dict[old_pid]
+        old_proc.join()
+        old_proc.close()
+        return old_pos
+
+    # Begin sampling for each sid
+    for sid in pbar:
+        if filled_pos >= max_parallel:
+            pos = _dequeue_proc()
+        else:
+            pos = filled_pos + 2 
+        filled_pos += 1
         p = Process(target=monte_carlo_sample_single, args=(
                     sid, qid, min_n, max_n, dtype, func_name, test_label, test_args,
-                    append_samples, i % max_parallel + 1, proc_queue, save_samples, scorer, proj_method))
+                    append_samples, pos, proc_queue, save_samples, scorer, proj_method))
         p.start()
-        processes.append(p)
+        proc_dict[p.pid] = p
 
-    # Ensure all remaining processes are completed
-    for p in processes:
-        p.join()
-
-    # Process remaining items in the queue if any
-    while not proc_queue.empty():
-        pid, pos = proc_queue.get()
+    for _ in range(max_parallel):
+        _dequeue_proc()
             
