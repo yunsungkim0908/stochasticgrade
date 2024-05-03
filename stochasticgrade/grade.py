@@ -6,6 +6,8 @@ import numpy as np
 import os
 import time
 
+from tqdm import tqdm
+
 from stochasticgrade.constants import DATA_DIR
 from stochasticgrade.sample import sample_sid_single
 from stochasticgrade.score import *
@@ -18,6 +20,22 @@ class StochasticGrade():
     """
     
     def __init__(self, qid, scorer, sample_sizes, frr, dtype, func_name, n_soln_samples, proj_method='ED'):
+        """
+        Instantiate the algorithm. Gather the solution samples.
+        
+        Parameters:
+        qid (str):                  the question ID
+        scorer (Scorer):            the scoring function to be used
+        sample_sizes (list of int): the sample sizes used for grading
+        frr (float):                the false rejection rate
+        dtype (str):                the data type of the program output
+        func_name (str):            the function to be sampled
+        n_soln_samples (int):       the number of solution samples
+        proj_method (str):          the projection method used for multidimensional samples
+
+        Returns: 
+        None
+        """
         self.qid = qid
         self.scorer = scorer
         self.sample_sizes = sample_sizes
@@ -43,14 +61,14 @@ class StochasticGrade():
             if 'array' not in self.dtype: 
                 self.soln_samples = np.load(soln_sample_path, allow_pickle=True)
             else:
-                proj_file = 'orthogonal_projection.npy' if self.proj_method == 'OP' else 'euclidean_distances.npy'
+                proj_file = 'orthogonal_projections.npy' if self.proj_method == 'OP' else 'euclidean_distances.npy'
                 soln_sample_path = os.path.join(DATA_DIR, self.qid, 'solution', 'solution', self.test_label, proj_file)
                 self.soln_samples = np.load(soln_sample_path, allow_pickle=True)
         else:
             raise ValueError(f'No solution samples found for {qid}! Did you run preprocess.py?')
         np.random.shuffle(self.soln_samples)
         
-    def sample(self, n, sid, pos=0):
+    def sample(self, n, sid, pos=0, show_sample_progress=True):
         """
         Expand the collection of total student samples to n.
         
@@ -80,14 +98,14 @@ class StochasticGrade():
         if n_samples > 0:      
             sample_sid_single(
                 sid, self.qid, n_samples, self.dtype, self.func_name, append_samples=True, 
-                pos=pos, test_label=self.test_label, test_args=self.test_args
+                pos=pos, test_label=self.test_label, test_args=self.test_args, show_progress=show_sample_progress
             )  
             
         # Load in samples
         self.stud_samples = np.load(file_path, allow_pickle=True)
         np.random.shuffle(self.stud_samples)
          
-    def grade(self, sid, pos=0, delete_samples=False):
+    def grade(self, sid, pos=0, delete_samples=False, show_sample_progress=True):
         """
         Grade the student program corresponding to the given student ID.
         Single process as part of the grade_parallel function.
@@ -121,7 +139,7 @@ class StochasticGrade():
             
             # Obtain the necessary amount of samples
             sample_size = self.sample_sizes[i]
-            self.sample(sample_size, sid, pos=pos)
+            self.sample(sample_size, sid, pos=pos, show_sample_progress=show_sample_progress)
             
             # Check if we obtained the appropriate amount of samples
             bad_single_dim = len(self.stud_samples) < sample_size
@@ -131,13 +149,13 @@ class StochasticGrade():
                 n_dims = 1
             bad_multi_dim = self.stud_samples.shape[1:] != n_dims
             if bad_single_dim or (bad_multi_dim and 'array' in self.dtype):
-                # The program is marked as correct with a very discrepant score
+                # The program is marked as incorrect with a very discrepant score
                 result = False, 1e7, sample_size, time.time() - start, {sample_size: 1e7}
                 break
                 
             # If multidimensional, we need the projections
             if 'array' in self.dtype: 
-                proj_file = 'orthogonal_distances.npy' if self.proj_method == 'OP' else 'euclidean_distances.npy'
+                proj_file = 'orthogonal_projections.npy' if self.proj_method == 'OP' else 'euclidean_distances.npy'
                 stud_file_path = os.path.join(DATA_DIR, self.qid, sid_type, sid, self.test_label, proj_file)
                 soln_file_path = os.path.join(DATA_DIR, self.qid, 'solution', 'solution', self.test_label, proj_file)
                 stud_dists = np.load(stud_file_path, allow_pickle=True)
@@ -184,7 +202,7 @@ class StochasticGrade():
             
         return result
         
-    def grade_wrapper(self, sid, pos, proc_queue, delete_samples):
+    def grade_wrapper(self, sid, pos, proc_queue, delete_samples, show_sample_progress):
         """
         Wrapper for grading a single student ID. It is called as a subprocess for grade_parallel.
         
@@ -197,47 +215,54 @@ class StochasticGrade():
         Returns:
         None
         """
-        result = self.grade(sid, pos=pos, delete_samples=delete_samples)
-        proc_queue.put((sid, result, pos))
+        result = self.grade(sid, pos=pos, delete_samples=delete_samples, show_sample_progress=show_sample_progress)
+        if proc_queue is not None:
+            proc_queue.put((mp.current_process().pid, pos, sid, result))
     
-    def grade_parallel(self, sids, max_parallel=20, delete_samples=False):
+    def grade_parallel(self, sids, max_parallel=20, delete_samples=False, show_sample_progress=True):
         """
         Grade multiple student submissions in parallel. 
         
         Parameters:
-        - sids (list of strings): the student IDs corresponding to submissions
+        - sids (list of str):     the student IDs corresponding to submissions
         - max_parallel (int):     the maximum number of parallel processes for grading
         
         Returns: 
         results (dict): a dictionary with student IDs as keys and their corresponding grading results
         """
-        
-        # Set up parallelization
-        processes = []
-        proc_queue = mp.Queue()
+
         results = {}
-        pbar = tqdm(sids, total=len(sids), dynamic_ncols=True)
 
-        # Start grading in parallel
-        for i, sid in enumerate(pbar):
-            while len(processes) >= max_parallel:
-                processes.pop(0).join()
-                
-            # Start a new process for each student ID
-            p = mp.Process(target=self.grade_wrapper, args=(sid, i % max_parallel + 1, proc_queue, delete_samples))
+        # Set up parallelization
+        proc_dict = dict()
+        proc_queue = mp.Queue(max_parallel)
+        filled_pos = 0
+        pbar = tqdm(sids, total=len(sids))
+
+        # Handle dequeueing 
+        def _dequeue_proc():
+            old_pid, old_pos, sid, result = proc_queue.get()
+            old_proc = proc_dict[old_pid]
+            old_proc.join()
+            old_proc.close()
+            results[sid] = result        
+            return old_pos
+
+        # Begin sampling for each sid
+        for sid in pbar:
+            if filled_pos >= max_parallel:
+                pos = _dequeue_proc()
+            else:
+                pos = filled_pos + 2
+            filled_pos += 1
+            p = mp.Process(target=self.grade_wrapper, 
+                           args=(sid, pos, proc_queue, delete_samples, show_sample_progress))
             p.start()
-            processes.append(p)
+            proc_dict[p.pid] = p
 
-        # Ensure all processes are completed
-        for p in processes:
-            p.join()
-        
-        # Collect all results
-        while not proc_queue.empty():
-            sid, result, pos = proc_queue.get()
-            results[sid] = result
+        for _ in range(max_parallel):
+            _dequeue_proc()
 
-        pbar.close()
         return results
 
 
@@ -254,10 +279,11 @@ if __name__ == '__main__':
                         help='maximum number of parallel processes for grading')
     parser.add_argument('--delete_samples', action='store_true', 
                         help='delete samples from sample directory for space conservation')
+    parser.add_argument('--no_best_n', action='store_true', 
+                        help='use the max value of N from config.ini instead of best_n (if choose_n was run)')
     args = parser.parse_args()
     qid = args.qid
     sids_file_path = args.sids_file_path
-    max_parallel = args.max_parallel
     
     # Load in parameters found in preprocess.py
     config = configparser.ConfigParser()
@@ -283,10 +309,11 @@ if __name__ == '__main__':
         proj_method = None
     
     # Load in the maximum value of n if already obtained from choose_n.py
-    best_n_path = os.path.join(DATA_DIR, qid, 'setup', f'best_n_far={frr}.txt')
-    if os.path.isfile(best_n_path):
-        with open(best_n_path) as f:
-            max_n = int(f.read().split('=')[1])
+    if not args.no_best_n:
+        best_n_path = os.path.join(DATA_DIR, qid, 'setup', f'best_n_far={frr}.txt')
+        if os.path.isfile(best_n_path):
+            with open(best_n_path) as f:
+                max_n = int(f.read().split('=')[1])
     
     # Determine sample sizes
     sample_sizes = []
@@ -307,7 +334,7 @@ if __name__ == '__main__':
     # Instatiate StochasticGrade and begin grading
     print(f'Grading {len(sids_to_grade)} students.\n')
     algorithm = StochasticGrade(qid, scorer, sample_sizes, frr, dtype, func_name, n_soln_samples, proj_method=proj_method)
-    results = algorithm.grade_parallel(sids_to_grade, max_parallel=max_parallel, delete_samples=args.delete_samples)
+    results = algorithm.grade_parallel(sids_to_grade, max_parallel=args.max_parallel, delete_samples=args.delete_samples)
     
     # Process and save results:
     print('\nProcessing and saving results.')
@@ -325,14 +352,14 @@ if __name__ == '__main__':
         }
         
         with open(os.path.join(DATA_DIR, qid, 'students', sid, 'grading_result.json'), 'w') as f:
-            json.dump(out, f)
+            json.dump(out, f, indent=4)
             
         for i in range(5):
             dicts[i][sid] = result[i]
     
     for i in range(5):
         with open(os.path.join(DATA_DIR, qid, 'results', f'{files[i]}.json'), 'w') as f:
-            json.dump(dicts[i], f)
+            json.dump(dicts[i], f, indent=4)
             
             
     # Generate a summative report 
