@@ -7,9 +7,6 @@ import sklearn.cluster
 import sklearn.metrics
 import sklearn.mixture
 
-from scipy import stats
-from sklearn.model_selection import GridSearchCV
-from sklearn.preprocessing import LabelEncoder
 from tqdm import tqdm
 
 from stochasticgrade.constants import DATA_DIR
@@ -20,8 +17,13 @@ from stochasticgrade.score import *
 def agglomerative(score_list, n_clusters=20):    
     """
     Performs agglomerative hierarchical clustering, creating `n_clusters` total.
-    Accepts a score_list: a list of lists of scores for various scorers.
-    Returns the cluster labels.
+
+    Parameters:
+    score_list (list of list): a list of lists of scores for various scorers
+    n_clusters (int):          the number of clusters to form
+
+    Returns:
+    cluster_labels (list): the cluster labels.
     """
     scores = np.column_stack(score_list)
     algorithm = sklearn.cluster.AgglomerativeClustering(n_clusters=n_clusters)
@@ -32,7 +34,28 @@ def agglomerative(score_list, n_clusters=20):
 def cluster(sids, qid, scorers, sizes, dtype, func_name, n_soln_samples, 
             n_clusters, max_parallel=20, proj_method='ED', test_suites={'': []}):
     """
-    Perform clustering...
+    Perform agglomerative hierarchical clustering based on scores calculated 
+    for each of the student programs. Multiple scorers or input arguments can be
+    used as different profiles for a student program, potentially yielding
+    better clustering.
+
+    Clusters and scores are saved in the results directory.
+
+    Parameters:
+    sids (list of str):       the list of student IDs to be clusters
+    qid (str):                the question ID
+    scorers (list of Scorer): the list of scorers to be used in clustering
+    sizes (list of int):      the list of student program sample sizes to use for scoring
+    dtype (str):              the data type of the student program output
+    func_name (str):          the function in the student program from which samples are generated
+    n_soln_samples (int):     the number of solution samples used for scoring
+    n_clusters (int):         the number of clusters to be created
+    max_parallel (int):       the maximum number of parallel process for sampling
+    proj_method (str):        the projection method used for multidimensional samples
+    test_suites (dict):       the dictionary of test labels to test arguments
+
+    Returns:
+    None
     """
     
     print('\n\n- - - - - CLUSTERING - - - - -\n')
@@ -60,10 +83,23 @@ def cluster(sids, qid, scorers, sizes, dtype, func_name, n_soln_samples,
             
             for test_label, _ in test_suites.items():
                 scores = []
-                soln_samples = np.load(os.path.join(DATA_DIR, qid, 'solution', 'solution', 
-                                                    test_label, 'samples.npy'), allow_pickle=True)
+                 
+                # Load in solution samples or projections
+                if 'array' not in dtype:
+                    soln_samples = np.load(os.path.join(DATA_DIR, qid, 'solution', 'solution', 
+                                                        test_label, 'samples.npy'), allow_pickle=True)
+                else:
+                    proj_part = 'orthogonal_projections.npy' if proj_method == 'OP' else 'euclidean_distances.npy'
+                    soln_samples = np.load(os.path.join(DATA_DIR, qid, 'solution', 'solution', 
+                                                        test_label, proj_part), allow_pickle=True)
                 for sid in tqdm(sids):
-                    sid_type = 'solution' if 'solution' in sid else 'students'
+                    # Load in the student samples
+                    if 'solution' in sid:
+                        sid_type = 'solution'
+                    elif 'closest_error' in sid:
+                        sid_type = 'setup'
+                    else:
+                        sid_type = 'students'
                     stud_samples = np.load(os.path.join(DATA_DIR, qid, sid_type, sid, test_label, 
                                                         'samples.npy'), allow_pickle=True)
                     
@@ -75,7 +111,14 @@ def cluster(sids, qid, scorers, sizes, dtype, func_name, n_soln_samples,
                         n_dims = 1
                     bad_multi_dim = stud_samples.shape[1:] != n_dims
 
-                    if bad_single_dim or (bad_multi_dim and 'array_shape_' in dtype):
+                    # Load in projections if needed
+                    if 'array' in dtype:
+                        proj_part = 'orthogonal_projections.npy' if proj_method == 'OP' else 'euclidean_distances.npy'
+                        stud_samples = np.load(os.path.join(DATA_DIR, qid, sid_type, sid, 
+                                                            test_label, proj_part), allow_pickle=True)
+
+                    # Compute score
+                    if bad_single_dim or (bad_multi_dim and 'array' in dtype):
                         score = 1e7
                     else:
                         score = scorer.compute_score(stud_samples[:size], soln_samples[:n_soln_samples])
@@ -94,7 +137,7 @@ def cluster(sids, qid, scorers, sizes, dtype, func_name, n_soln_samples,
             scorer_names += scorer + '+'
         scorer_names = scorer_names[:-1]
         
-        test_path = f'ncases={str(len(test_suite))}' if test_suites != {'': []} else ''
+        test_path = f'ncases={str(len(test_suites))}' if test_suites != {'': []} else ''
         path = os.path.join(cluster_path, scorer_names, test_path, str(size))
         if not os.path.isdir(path):
             os.makedirs(path)
@@ -148,6 +191,9 @@ if __name__ == '__main__':
         proj_method = ''
     if args.test_suites_path is not None:
         with open(args.test_suites_path) as f:
+            test_suites = json.load(f)
+    elif os.path.isfile(os.path.join(DATA_DIR, qid, 'setup', 'grading_arguments.json')):
+        with open(os.path.join(DATA_DIR, qid, 'setup', 'grading_arguments.json')) as f:
             test_suites = json.load(f)
     else:
         test_suites = {'': []}
