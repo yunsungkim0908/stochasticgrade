@@ -10,7 +10,7 @@ import sklearn.mixture
 from tqdm import tqdm
 
 from stochasticgrade.constants import DATA_DIR
-from stochasticgrade.sample import sample_sid_multi
+from stochasticgrade.sample import sample_sid_single, sample_sid_multi
 from stochasticgrade.score import *
 
 
@@ -62,7 +62,7 @@ def cluster(sids, qid, scorers, sizes, dtype, func_name, n_soln_samples,
     
     # Check if samples for the student ID already exist
     # Sample if more samples are needed (sample to the maximum size)
-    print('Obtaining the necessary amount of samples.')
+    print('Obtaining the necessary amount of student samples.')
     for test_label, test_args in test_suites.items():
         sample_sid_multi(
             sids, qid, max(sizes), dtype, func_name, max_parallel=max_parallel, 
@@ -70,6 +70,16 @@ def cluster(sids, qid, scorers, sizes, dtype, func_name, n_soln_samples,
             proj_method=proj_method, sample_to=max(sizes)
         )  
     
+    # Check if samples for the solution already exist
+    print('Obtaining the necessary amount of solution samples.')
+    for test_label, test_args in test_suites.items():
+        sample_sid_single(
+            'solution', qid, max(sizes), dtype, func_name, test_label=test_label,
+            test_args=test_args, append_samples=True, proj_method=proj_method,
+            sample_to=max(sizes)
+        )
+
+
     # Calculate scores to be used in clustering
     scorer_map = make_scorer_map()
     
@@ -146,9 +156,9 @@ def cluster(sids, qid, scorers, sizes, dtype, func_name, n_soln_samples,
         score_list = {sids[i]: list(np.array(score_list)[:, i]) for i in range(len(sids))}  
 
         with open(os.path.join(path, 'clusters.json'), 'w') as f:
-            json.dump(cluster_labels, f)
+            json.dump(cluster_labels, f, indent=4)
         with open(os.path.join(path, 'scores.json'), 'w') as f:
-            json.dump(score_list, f)
+            json.dump(score_list, f, indent=4)
         
         print('Success!\n')
     print('\n')

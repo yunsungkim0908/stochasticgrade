@@ -23,7 +23,7 @@ warnings.filterwarnings('ignore')
 def get_samples(
     sid, qid, num_samples, dtype, func_name, test_label='', test_args=[],
     early_stopping=10000, max_timeouts=5, append_samples=False, pos=0, sample_to=None,
-    show_progress=True, long_sampling_time=60
+    show_progress=True, long_sampling_time=300
 ):
     """
     Samples `num_samples` samples from the student program belonging to `sid`. 
@@ -94,10 +94,9 @@ def get_samples(
     # Begin sampling
     while samples_remaining > 0:
 
-        # TODO: Do we want this?
-        # if time.time() - sampling_time > long_sampling_time:
-        #     print(f'Still sampling for sid {sid} after {long_sampling_time} seconds. Consider inspecting the program.')
-        #     sampling_time = time.time()
+        if time.time() - sampling_time > long_sampling_time:
+            print(f'Still sampling for sid {sid} after {time.time() - sampling_time:.1f} seconds. Consider inspecting the program.')
+            sampling_time = time.time()
         
         # Check for early stopping (timeouts or degenerate distributions)
         if timeout_cnt > max_timeouts:
@@ -398,14 +397,15 @@ def sample_sid_multi(
         old_proc = proc_dict[old_pid]
         old_proc.join()
         old_proc.close()
+        pbar.update(1)  
         return old_pos
 
     # Begin sampling for each sid
-    for sid in pbar:
+    for sid in sids:
         if filled_pos >= max_parallel:
             pos = _dequeue_proc()
         else:
-            pos = filled_pos + 2
+            pos = filled_pos + 1
         filled_pos += 1
         p = Process(target=sample_sid_single,
                     args=[sid, qid, num_samples, dtype, func_name, test_label, test_args,
@@ -545,14 +545,15 @@ def monte_carlo_sample_multi(
         old_proc = proc_dict[old_pid]
         old_proc.join()
         old_proc.close()
+        pbar.update(1)  
         return old_pos
 
     # Begin sampling for each sid
-    for sid in pbar:
+    for sid in sids:
         if filled_pos >= max_parallel:
             pos = _dequeue_proc()
         else:
-            pos = filled_pos + 2 
+            pos = filled_pos + 1
         filled_pos += 1
         p = Process(target=monte_carlo_sample_single, args=(
                     sid, qid, min_n, max_n, dtype, func_name, test_label, test_args,

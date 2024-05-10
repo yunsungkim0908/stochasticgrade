@@ -50,7 +50,8 @@ class StochasticGrade():
         if os.path.isfile(args_path):
             self.test_label = 'grading_case'
             with open(args_path) as f:
-                self.test_args = json.load(f)
+                test_args = json.load(f)
+                self.test_args = test_args[self.test_label]
         else:
             self.test_label = ''
             self.test_args = []
@@ -195,10 +196,14 @@ class StochasticGrade():
         if result is None:
             result = True, score, self.sample_sizes[-1], time.time() - start, sizes_to_scores
         
-        # Remove samples if requested
+        # Remove samples and projections if requested
         if delete_samples:
             sample_file = os.path.join(DATA_DIR, self.qid, sid_type, sid, self.test_label, 'samples.npy')
             os.remove(sample_file)
+            if 'array' in dtype:
+                proj_file = 'orthogonal_projections.npy' if self.proj_method == 'OP' else 'euclidean_distances.npy'
+                sample_file = os.path.join(DATA_DIR, self.qid, sid_type, sid, self.test_label, proj_file)
+                os.remove(sample_file)
             
         return result
         
@@ -245,15 +250,16 @@ class StochasticGrade():
             old_proc = proc_dict[old_pid]
             old_proc.join()
             old_proc.close()
-            results[sid] = result        
+            results[sid] = result  
+            pbar.update(1)       
             return old_pos
 
         # Begin sampling for each sid
-        for sid in pbar:
+        for sid in sids:
             if filled_pos >= max_parallel:
                 pos = _dequeue_proc()
             else:
-                pos = filled_pos + 2
+                pos = filled_pos + 1
             filled_pos += 1
             p = mp.Process(target=self.grade_wrapper, 
                            args=(sid, pos, proc_queue, delete_samples, show_sample_progress))
@@ -278,7 +284,7 @@ if __name__ == '__main__':
     parser.add_argument('--max_parallel', type=int, default=10, 
                         help='maximum number of parallel processes for grading')
     parser.add_argument('--delete_samples', action='store_true', 
-                        help='delete samples from sample directory for space conservation')
+                        help='delete samples/projections from sample directory for space conservation')
     parser.add_argument('--no_best_n', action='store_true', 
                         help='use the max value of N from config.ini instead of best_n (if choose_n was run)')
     args = parser.parse_args()

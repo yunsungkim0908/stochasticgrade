@@ -13,7 +13,7 @@ from tqdm import tqdm
 from stochasticgrade.constants import *
 
 
-def get_euclidean_distances(stud_samples, soln_samples, sid, qid, dilation=1, test_label=''):
+def get_euclidean_distances(stud_samples, soln_samples, sid, qid, test_label='', dilation=1):
     """
     Measures the Euclidean distance between a randomly selected 
     anchor point (near the solution distribution) and the student samples.
