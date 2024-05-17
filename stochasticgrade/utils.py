@@ -13,12 +13,16 @@ from tqdm import tqdm
 from stochasticgrade.constants import *
 
 
-def get_euclidean_distances(stud_samples, soln_samples, sid, qid, test_label='', dilation=1):
+def get_euclidean_distances(stud_samples, soln_samples, sid, qid, test_label='', dilation=1, anchor_id=None):
     """
     Measures the Euclidean distance between a randomly selected 
     anchor point (near the solution distribution) and the student samples.
     """
-    anchor_path = os.path.join(DATA_DIR, qid, 'setup', 'random_anchor.json')
+
+    if anchor_id is None:
+        anchor_path = os.path.join(DATA_DIR, qid, 'setup', 'random_anchor.json')
+    else:
+        anchor_path = os.path.join(DATA_DIR, qid, 'setup', f'random_anchor{anchor_id}.json')
     
     # Sample the random anchor point from a bounding box of the solution samples
     if not os.path.isfile(anchor_path):
@@ -41,7 +45,12 @@ def get_euclidean_distances(stud_samples, soln_samples, sid, qid, test_label='',
         with open(os.path.join(anchor_path), 'w') as f:
             json.dump(anchor, f)
         soln_dists = np.sqrt(np.sum((soln_samples - anchor) * (soln_samples - anchor), axis=1)) 
-        path = os.path.join(DATA_DIR, qid, 'solution', 'solution', test_label, 'euclidean_distances.npy')
+
+        if anchor_id is None:
+            path = os.path.join(DATA_DIR, qid, 'solution', 'solution', test_label, 'euclidean_distances.npy')
+        else:
+            path = os.path.join(DATA_DIR, qid, 'solution', 'solution', test_label, 
+                                f'euclidean_distances{anchor_id}.npy')
         np.save(path, soln_dists)
         
     with open(os.path.join(anchor_path)) as f:
@@ -54,18 +63,26 @@ def get_euclidean_distances(stud_samples, soln_samples, sid, qid, test_label='',
         sid_type = 'solution/mc_solutions' if 'mc_solution' in sid else 'solution'
     else:
         sid_type = 'students'
-    path = os.path.join(DATA_DIR, qid, sid_type, sid, 'euclidean_distances.npy')
+
+    if anchor_id is None:
+        path = os.path.join(DATA_DIR, qid, sid_type, sid, 'euclidean_distances.npy')
+    else:
+        path = os.path.join(DATA_DIR, qid, sid_type, sid, f'euclidean_distances{anchor_id}.npy')
     np.save(path, dists)
     
     return dists
 
 
-def get_orthogonal_projections(stud_samples, soln_samples, sid, qid, test_label=''):
+def get_orthogonal_projections(stud_samples, soln_samples, sid, qid, test_label='', vector_id=None):
     """
     Calculates the projection of the student samples onto a unit vector
     from the corresponding n-dimensional hypersphere. 
     """
-    vector_path = os.path.join(DATA_DIR, qid, 'setup', 'random_unit_vector.json')
+
+    if vector_id is None:
+        vector_path = os.path.join(DATA_DIR, qid, 'setup', 'random_unit_vector.json')
+    else:
+        vector_path = os.path.join(DATA_DIR, qid, 'setup', f'random_unit_vector{vector_id}.json')
     
     # Sample the random unit vector from the hypersphere
     if not os.path.isfile(vector_path):
@@ -81,7 +98,12 @@ def get_orthogonal_projections(stud_samples, soln_samples, sid, qid, test_label=
         with open(os.path.join(vector_path), 'w') as f:
             json.dump(unit_vector.tolist(), f)
         soln_dists = np.dot(soln_samples, unit_vector)
-        path = os.path.join(DATA_DIR, qid, 'solution', 'solution', test_label, 'orthogonal_projections.npy')
+
+        if vector_id is None:
+            path = os.path.join(DATA_DIR, qid, 'solution', 'solution', test_label, 'orthogonal_projections.npy')
+        else:
+            path = os.path.join(DATA_DIR, qid, 'solution', 'solution', test_label, 
+                                f'orthogonal_projections.npy{vector_id}')
         np.save(path, soln_dists)
         
     with open(os.path.join(vector_path)) as f:
@@ -94,7 +116,11 @@ def get_orthogonal_projections(stud_samples, soln_samples, sid, qid, test_label=
         sid_type = 'solution/mc_solutions' if 'mc_solution' in sid else 'solution'
     else:
         sid_type = 'students'
-    path = os.path.join(DATA_DIR, qid, sid_type, sid, 'orthogonal_projections.npy')
+
+    if vector_id is None:
+        path = os.path.join(DATA_DIR, qid, sid_type, sid, 'orthogonal_projections.npy')
+    else:
+        path = os.path.join(DATA_DIR, qid, sid_type, sid, f'orthogonal_projections{vector_id}.npy')
     np.save(path, dists)
     
     return dists
