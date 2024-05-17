@@ -130,6 +130,11 @@ if __name__ == '__main__':
     else:
         proj_method = None
 
+    if args.far is not None: 
+        config['Parameters']['far'] = args.far
+    else:
+        config['Parameters']['far'] = '0.01'
+
     # Check if the disparity function type checks with this script
     if scorer_name in ['TScorer', 'MSDScorer']:
         raise ValueError(f'choose_n cannot be executed with {scorer_name}. Please select AD or WS.')
