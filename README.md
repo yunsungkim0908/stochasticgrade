@@ -10,7 +10,7 @@ This repository contains the code for StochasticGrade, an automated assessment f
     git clone [repository-url]
     cd [repository-directory]
     ```
-2. Install the package in editable mode:
+2. Install the StochasticGrade package:
     ```sh
     pip install -e .
     ```
