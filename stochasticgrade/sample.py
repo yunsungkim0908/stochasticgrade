@@ -1,3 +1,9 @@
+"""
+sample.py
+---------
+This code handles the sampling functionality, allowing us to sample from programs.
+"""
+
 import contextlib
 import io
 import json
@@ -29,18 +35,20 @@ def get_samples(
     Samples `num_samples` samples from the student program belonging to `sid`. 
 
     Parameters:
-    sid (str):             the student ID
-    qid (str):             the question ID
-    num_samples (int):     the number of samples to be generated
-    dtype (str):           the data type of the program output
-    func_name (str):       the function to be sampled
-    test_label (str):      the label of the function arguments
-    test_args (list):      the function arguments needed for execution
-    early_stopping (int):  early termination criteria
-    max_timeouts (int):    number of permissible timeouts before termination
-    append_samples (bool): whether to append generated samples to existing samples
-    pos (int):             progress bar position
-    sample_to (int):       sample exactly to the provided number
+    sid (str):                the student ID
+    qid (str):                the question ID
+    num_samples (int):        the number of samples to be generated
+    dtype (str):              the data type of the program output
+    func_name (str):          the function to be sampled
+    test_label (str):         the label of the function arguments
+    test_args (list):         the function arguments needed for execution
+    early_stopping (int):     early termination criteria
+    max_timeouts (int):       number of permissible timeouts before termination
+    append_samples (bool):    whether to append generated samples to existing samples
+    pos (int):                progress bar position
+    sample_to (int):          sample exactly to the provided number
+    show_progress (bool):     show sampling progress bar
+    long_sampling_time (int): number of seconds until sampling time warning is generated
 
     Returns: 
     samples (list): the generated samples
@@ -95,7 +103,8 @@ def get_samples(
     while samples_remaining > 0:
 
         if time.time() - sampling_time > long_sampling_time:
-            print(f'Still sampling for sid {sid} after {time.time() - sampling_time:.1f} seconds. Consider inspecting the program.')
+            print(f'Still sampling for sid {sid} after {time.time() - sampling_time:.1f} seconds.')
+            print('Consider inspecting the program.')
             sampling_time = time.time()
         
         # Check for early stopping (timeouts or degenerate distributions)
@@ -233,6 +242,7 @@ def evaluate_student_code(sid, qid, prog, func_name, test_args=[]):
             func = local_scope.get(func_name)
             if callable(func):
                 val = func(*test_args)
+                print(val)
             else:
                 raise ValueError(f'No function named "{func_name}" found in the code for question {qid}')
     except Exception as e:
@@ -316,6 +326,7 @@ def sample_sid_single(
     proc_queue (Queue):    the process queue
     proj_method (str):     the projection method used for multidimensional samples
     sample_to (int):       sample exactly to the provided number
+    show_progress (bool):  show sampling progress bar
 
     Returns: 
     None
@@ -349,7 +360,8 @@ def sample_sid_single(
         # This projection is specified by proj_method
         if 'array' in dtype and samples:
             samples = np.array(samples)
-            soln_samples = np.load(os.path.join(DATA_DIR, qid, 'solution', 'solution', test_label, 'samples.npy'))
+            soln_samples = np.load(os.path.join(DATA_DIR, qid, 'solution', 'solution', test_label, 
+                                                'samples.npy'))
             if proj_method == 'OP':  # Orthogonal Projection method
                 stud_dists = get_orthogonal_projections(samples, soln_samples, sid, qid, test_label)
             else:  # Assuming Euclidean Distance method
@@ -380,6 +392,7 @@ def sample_sid_multi(
     append_samples (bool): whether to append generated samples to existing samples
     proj_method (str):     the projection method used for multidimensional samples
     sample_to (int):       sample exactly to the provided number
+    show_progress (bool):  show sampling progress bar
 
     Returns: 
     None
@@ -477,7 +490,8 @@ def monte_carlo_sample_single(
     
     save_path = os.path.join(dirname, f'mc_scores_{str(scorer)}{proj_method}.json')
     scores = {}
-    soln_samples = np.load(os.path.join(DATA_DIR, qid, 'solution', 'solution', test_label, 'samples.npy'))
+    soln_samples = np.load(os.path.join(DATA_DIR, qid, 'solution', 'solution', test_label, 
+                                        'samples.npy'))
     
     # Determine whether to use the samples themselves (1D samples) or their projections
     # (multidimensional samples) for computing the score
