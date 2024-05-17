@@ -133,7 +133,7 @@ python stochastic_grade.py TS
 
 ### RN
 ```sh
-python preprocess.py RN ./example_data/RN/ main --dtype=array_shape_(10,) --scorer=TScorer --proj_method=ED
+python preprocess.py RN ./example_data/RN/ main --dtype='array_shape_(10,)' --scorer=TScorer --proj_method=ED
 python stochastic_grade.py RN
 ```
 
