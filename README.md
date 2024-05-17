@@ -114,7 +114,7 @@ You can find four sample problem directories in the repository. Here are the gra
 ### SimExp
 
 ```sh
-python preprocess.py SimExp simulate_exponential ./example_data/SimExp/ simulate_exponential
+python preprocess.py SimExp ./example_data/SimExp/ simulate_exponential
 python stochastic_grade.py SimExp
 ```
 
