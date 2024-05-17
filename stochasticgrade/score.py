@@ -1,3 +1,10 @@
+"""
+score.py
+--------
+This file stores the disparity functions used for grading.
+The pre-defined functions are T, MSD, AD, and WS.
+"""
+
 import inspect
 import json
 import numpy as np
@@ -182,6 +189,9 @@ class WassersteinScorer(Scorer):
 
 
 def make_scorer_map():
+    """ 
+    Create a mapping between scorer names and scorers.
+    """
     import __main__
     __name__ = "__main__"
     scorer_map = {}
