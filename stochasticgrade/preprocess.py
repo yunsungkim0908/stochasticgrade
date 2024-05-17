@@ -235,7 +235,6 @@ if __name__ == '__main__':
     
     # Model parameter arguments
     parser.add_argument('--dtype', type=str, default='scalar')
-    parser.add_argument('--far', type=float, default=None)
     parser.add_argument('--frr', type=float, default=0.01)
     parser.add_argument('--max_n', type=int, default=409600)
     parser.add_argument('--min_n', type=int, default=400)
@@ -270,11 +269,6 @@ if __name__ == '__main__':
         config['Parameters']['proj_method'] = args.proj_method
     elif 'array' in args.dtype and args.proj_method is not None:
         config['Parameters']['proj_method'] = 'ED'
-                
-    if args.far is not None: 
-        config['Parameters']['far'] = args.far
-    else:
-        config['Parameters']['far'] = '0.01'
         
     config_path = os.path.join(DATA_DIR, qid, 'setup', 'config.ini')
     with open(config_path, 'w') as f:
