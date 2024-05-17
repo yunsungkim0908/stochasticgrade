@@ -1,10 +1,17 @@
+"""
+choose_n.py
+-----------
+This file allows the selection of the best value of N (the maximum necessary number
+of student samples) that one may need in order to satisfy a given false acceptance rate.
+"""
+
 import argparse
 import configparser
 import os
 import shutil
 
 from stochasticgrade.constants import DATA_DIR
-from stochasticgrade.grade import StochasticGrade
+from stochasticgrade.stochastic_grade import StochasticGrade
 from stochasticgrade.score import *
         
 
@@ -58,6 +65,7 @@ def choose_n(qid, false_acceptance_rate, false_rejection_rate, n_soln_samples,
         best_n = size
         algorithm = StochasticGrade(qid, scorer, [size], false_rejection_rate, dtype, func_name,
                                     n_soln_samples=n_soln_samples, proj_method=proj_method)
+        
         # Run the grading algorithm on the error program M times
         false_acceptances = 0    
         results = algorithm.grade_parallel(sids, max_parallel=max_parallel)
@@ -121,6 +129,10 @@ if __name__ == '__main__':
         proj_method = config['Parameters']['proj_method']
     else:
         proj_method = None
+
+    # Check if the disparity function type checks with this script
+    if scorer_name in ['TScorer', 'MSDScorer']:
+        raise ValueError(f'choose_n cannot be executed with {scorer_name}. Please select AD or WS.')
                
     # Run choose_n and save the best selection for the number of samples that obey the FAR
     best_n = choose_n(
