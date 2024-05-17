@@ -102,7 +102,7 @@ if __name__ == '__main__':
     parser.add_argument('--M', type=int, default=1000, 
                         help='the number of times to execute the grading algorithm to check FAR')
     parser.add_argument('--max_parallel', type=int, default=20, 
-                        help='the maximum number of parallel processes for grading')
+                        help='the maximum number of parallel processes for sampling')
     args = parser.parse_args()
     
     qid = args.qid
