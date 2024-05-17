@@ -139,5 +139,5 @@ python stochastic_grade.py RN
 
 ## Troubleshooting
 
-- A common source of error is incorrectly specifying model parameters for StochasticGrade. Make sure to fully specify any necessary parameters for the model.
+- A common source of error is incorrectly specifying model parameters for StochasticGrade. Make sure to fully specify any necessary parameters for the model (especially the data type!).
 - You may encounter a problem using the `numpy.random` module if using parallelized grading, where student samples are generated using a similar seed. It is preferred to use the `random` module. Alternatively, set the seed based on the process ID, such as `os.getpid() % 2**32`. 
