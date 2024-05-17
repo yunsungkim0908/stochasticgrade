@@ -1,12 +1,14 @@
 {
-    "grading_case": {
-        "A": {
-            "n_success": 10,
-            "n_trials": 25
-        },
-        "B": {
-            "n_success": 10,
-            "n_trials": 30
+    "grading_case": [
+        {
+            "A": {
+                "n_success": 10,
+                "n_trials": 25
+            },
+            "B": {
+                "n_success": 10,
+                "n_trials": 30
+            }
         }
-    }
+    ]
 }
