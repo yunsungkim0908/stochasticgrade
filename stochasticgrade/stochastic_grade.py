@@ -155,7 +155,7 @@ class StochasticGrade():
             # Check if we obtained the appropriate amount of samples
             bad_single_dim = len(self.stud_samples) < sample_size
             if 'array' in self.dtype:
-                n_dims = tuple([int(i) for i in self.dtype.split('array_shape_')[1][1:-1].split(',')])
+                n_dims = tuple([int(i) for i in self.dtype.split('array_shape_')[1][1:-1].split(',') if i != ''])
             else:
                 n_dims = 1
             bad_multi_dim = self.stud_samples.shape[1:] != n_dims

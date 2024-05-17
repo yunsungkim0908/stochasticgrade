@@ -138,7 +138,7 @@ def get_samples(
             samples.extend(val)
             
         if 'array' in dtype: 
-            shape = tuple([int(i) for i in dtype.split('array_shape_')[1][1:-1].split(',')])
+            shape = tuple([int(i) for i in dtype.split('array_shape_')[1][1:-1].split(',') if i != ''])
             if val is None or len(val) == 0:
                 timeout_cnt += 1
                 break

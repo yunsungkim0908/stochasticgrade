@@ -114,26 +114,26 @@ You can find four sample problem directories in the repository. Here are the gra
 ### SimExp
 
 ```sh
-python preprocess.py SimExp simulate_exponential ./unprocessed_data/SimExp/ simulate_exponential
+python preprocess.py SimExp ./example_data/SimExp/ simulate_exponential
 python stochastic_grade.py SimExp
 ```
 
 ### AlgoArt 
 
 ```sh
-python preprocess.py AlgoArt ./unprocessed_data/AlgoArt/ main --dtype=list --scorer=MSDScorer
+python preprocess.py AlgoArt ./example_data/AlgoArt/ main --dtype=list --scorer=MSDScorer
 python stochastic_grade.py AlgoArt
 ```
 
 ### TS
 ```sh
-python preprocess.py TS ./unprocessed_data/TS/ main --scorer=TScorer
+python preprocess.py TS ./example_data/TS/ main --scorer=TScorer
 python stochastic_grade.py TS
 ```
 
 ### RN
 ```sh
-python preprocess.py RN ./unprocessed_data/RN/ main --dtype=array_shape_(10,) --scorer=TScorer --proj_method=ED
+python preprocess.py RN ./example_data/RN/ main --dtype=array_shape_(10,) --scorer=TScorer --proj_method=ED
 python stochastic_grade.py RN
 ```
 
