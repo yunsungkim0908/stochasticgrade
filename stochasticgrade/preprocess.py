@@ -1,3 +1,12 @@
+"""
+preprocess.py
+-------------
+This file handles loading and parsing data.
+It creates the directory structure and components necessary to store and handle data
+for a given problem.
+It also performs preliminary sampling for the solution program and generates Monte Carlo samples.
+"""
+
 import argparse
 import configparser
 import json
@@ -28,8 +37,8 @@ def load_qid_data(file_path, qid):
                       - closest_error.py: the closest acceptable error program to the solution
                         (this is used if trying to adjust the false acceptance rate)
                       - grading_arguments.json: a .json file containing the arguments needed to run
-                        the function to be graded. It is a mapping between variable names and the argument.
-                        The variables must be in the same order.
+                        the function to be graded. It is a mapping between variable names and the 
+                        argument. The variables must be in the same order.
                       
     qid (str):        the question ID
     
@@ -70,7 +79,7 @@ def load_qid_data(file_path, qid):
     # Load solution program data
     print('Loading in the solution program data.')
     if 'solution.py' not in os.listdir(file_path):
-        raise ValueError(f'Please create the solution program "solution.py" in the file path "{file_path}".')
+        raise ValueError(f'Please create solution program "solution.py" in file path "{file_path}".')
     with open(os.path.join(file_path, 'solution.py')) as f:
         solution_program = f.read()
     
@@ -143,7 +152,7 @@ def sample_solution(qid, n_samples, dtype, func_name, test_label='', test_args=[
     samples = np.load(sample_path, allow_pickle=True)
     if len(samples) == 0:
         os.remove(sample_path)
-        raise Exception('Did not successfully generate samples. Did you correct specify all model parameters?')
+        raise Exception('Did not successfully generate samples. Did you correctly specify all model parameters?')
     else:
         print(f'Succesfully generated {len(samples)} solution samples!\n\n')
     
@@ -181,7 +190,7 @@ def monte_carlo(min_n, max_n, qid, dtype, func_name, scorer, M=1000, max_paralle
     sids = [f'mc_solution_{i+1}' for i in range(M)]
     monte_carlo_sample_multi(
         sids, qid, min_n, max_n, dtype, func_name, max_parallel,
-        test_label='', test_args=[], save_samples=save_samples, 
+        test_label=test_label, test_args=test_args, save_samples=save_samples, 
         scorer=scorer, proj_method=proj_method
     )
     
