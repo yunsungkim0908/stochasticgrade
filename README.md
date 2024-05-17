@@ -26,7 +26,7 @@ Create a folder containing the following information:
   - `[student-id].py` files: Each file contains a stochastic program written by a student. Each student must have a unique `student-id`.
   - A `.json` file: Contains a mapping between each `student-id` and their stochastic program as a string.
 
-- (Optional) `grading_arguments.json`: Used if the program to be evaluated requires input arguments. This file is a mapping between a unique label and the input arguments. Refer to `data/TS/setup/grading_arguments.json` for an example.
+- (Optional) `grading_arguments.json`: Used if the program to be evaluated requires input arguments. This file is a mapping between a unique label and the input arguments. Refer to `example_data/TS/grading_arguments.json` for an example.
 
 - (Optional) `closest_error.py`: The buggy student program most similar to the correct answer. This is used by `choose_n.py` to determine the minimum sample size that adheres to a provided false acceptance rate.
 
