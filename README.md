@@ -16,19 +16,24 @@ This repository contains the code for StochasticGrade, an automated assessment f
     ```
 3. Adjust the `*_DIR` values in `stochasticgrade/constants.py` according to your environment.
 
+
 ## Overview
 
 StochasticGrade is designed to automate the assessment of stochastic programs, which produce probabilistic outputs. Following is a brief overview of the general flow of StochasticGrade:
 
 1. Preprocessing
-   - Gather all required data, including the correct solution and student submissions.
+   - Gather all required data for the problem you'd like to grade, including the correct solution and student submissions.
    - Run `preprocess.py` with the necessary flags to set up problem-specific parameters and directories.
+     
 2. Grading
    - Run `stochastic_grade.py` to evaluate submissions. This is done by sampling outputs and comparing them using the specified disparity function.
+     
 3. (Optional) Clustering
    - Run `cluster.py` to group similar student submissions. This step helps identify common errors and patterns in student responses. Enhance clustering with different disparity functions, projections, or input arguments.
+     
 4. Result Management:
     - All grading and clustering results are stored in the designated `results` directory. Individual student results are available in the `students` subdirectory.
+
 
 ## Example Usage
 
