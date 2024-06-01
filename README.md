@@ -16,6 +16,50 @@ This repository contains the code for StochasticGrade, an automated assessment f
     ```
 3. Adjust the `*_DIR` values in `stochasticgrade/constants.py` according to your environment.
 
+## Overview
+
+StochasticGrade is designed to automate the assessment of stochastic programs, which produce probabilistic outputs. Following is a brief overview of the general flow of StochasticGrade:
+
+1. Preprocessing
+   - Gather all required data, including the correct solution and student submissions.
+   - Run `preprocess.py` with the necessary flags to set up problem-specific parameters and directories.
+2. Grading
+   - Run `stochastic_grade.py` to evaluate submissions. This is done by sampling outputs and comparing them using the specified disparity function.
+3. (Optional) Clustering
+   - Run `cluster.py` to group similar student submissions. This step helps identify common errors and patterns in student responses. Enhance clustering with different disparity functions, projections, or input arguments.
+4. Result Management:
+    - All grading and clustering results are stored in the designated `results` directory. Individual student results are available in the `students` subdirectory.
+
+## Example Usage
+
+You can find four sample problem directories in the repository. Here are the grading pipelines for all four:
+
+### SimExp
+
+```sh
+python preprocess.py SimExp ./example_data/SimExp/ simulate_exponential
+python stochastic_grade.py SimExp
+```
+
+### AlgoArt 
+
+```sh
+python preprocess.py AlgoArt ./example_data/AlgoArt/ main --dtype=list --scorer=MSDScorer
+python stochastic_grade.py AlgoArt
+```
+
+### TS
+```sh
+python preprocess.py TS ./example_data/TS/ main --scorer=TScorer
+python stochastic_grade.py TS
+```
+
+### RN
+```sh
+python preprocess.py RN ./example_data/RN/ main --dtype='array_shape_(10,)' --scorer=TScorer --proj_method=ED
+python stochastic_grade.py RN
+```
+
 ## Organizing Data for Your Problem
 
 Create a folder containing the following information:
@@ -46,7 +90,7 @@ Create a folder containing the following information:
 
     If necessary, adjust the default StochasticGrade parameters to fit the nature of your problem. Available flags include:
 
-    - `--scorer`: Scoring method. Default is `AndersonDarlingScorer`.
+    - `--scorer`: Disparity function (scoring/comparison method). Default is `AndersonDarlingScorer`.
     - `--min_n`: Minimum number of samples. Default is 400.
     - `--max_n`: Maximum number of samples. Default is 409600.
     - `--n_scale_factor`: Scale factor for the number of samples. Default is 4.
@@ -95,7 +139,7 @@ If you'd like to cluster student programs, run
   ```
 
   Set cluster-specific flags as:
-  - `--scorers`: A comma-separated string of scorer names to be used in clustering (e.g. AndersonDarlingScorer,TScorer). Default is AndersonDarlingScorer. 
+  - `--scorers`: A comma-separated string of scorer (disparity function) names to be used in clustering (e.g. AndersonDarlingScorer,TScorer). Default is AndersonDarlingScorer. 
   - `--sizes`: A comma-separated string of sizes to be used in clustering (e.g. 400,1600,6400). Default is 25600.
   - `--n_clusters`: The number of clusters to create. This works best if it coincides roughly with the expected number of errors. Default is 20.
   - `--normalize_scores`: Normalize the calculated scores before clustering.
@@ -105,37 +149,6 @@ If you'd like to cluster student programs, run
   - `--sids_file_path`: Same as above.
 
 Results are stored under the `results/clusters` directory for the `qid`.
-
-
-## Examples
-
-You can find four sample problem directories in the repository. Here are the grading pipelines for all four:
-
-### SimExp
-
-```sh
-python preprocess.py SimExp ./example_data/SimExp/ simulate_exponential
-python stochastic_grade.py SimExp
-```
-
-### AlgoArt 
-
-```sh
-python preprocess.py AlgoArt ./example_data/AlgoArt/ main --dtype=list --scorer=MSDScorer
-python stochastic_grade.py AlgoArt
-```
-
-### TS
-```sh
-python preprocess.py TS ./example_data/TS/ main --scorer=TScorer
-python stochastic_grade.py TS
-```
-
-### RN
-```sh
-python preprocess.py RN ./example_data/RN/ main --dtype='array_shape_(10,)' --scorer=TScorer --proj_method=ED
-python stochastic_grade.py RN
-```
 
 ## Troubleshooting
 
