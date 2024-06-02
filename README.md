@@ -1,6 +1,6 @@
 # StochasticGrade
 
-This repository contains the code for StochasticGrade, an automated assessment framework for evaluating stochastic programs. StochasticGrade is introduced in the paper "Grading and Clustering Student Programs That Produce Probabilistic Output," published in EDM '24: the 17th International Conference on Educational Data Mining, 2024.
+This repository contains the code for StochasticGrade, an automated assessment framework for evaluating stochastic programs. StochasticGrade is introduced in the paper "Grading and Clustering Student Programs That Produce Probabilistic Output," published in EDM '24: the 17th International Conference on Educational Data Mining, 2024. 
 
 
 ## Installation
@@ -21,17 +21,17 @@ This repository contains the code for StochasticGrade, an automated assessment f
 
 StochasticGrade is designed to automate the assessment of stochastic programs, which produce probabilistic outputs. Following is a brief overview of the general flow of StochasticGrade:
 
-1. Preprocessing
+1. ### Preprocessing
    - Gather all required data for the problem you'd like to grade, including the correct solution and student submissions.
    - Run `preprocess.py` with the necessary flags to set up problem-specific parameters and directories.
      
-2. Grading
+2. ### Grading
    - Run `stochastic_grade.py` to evaluate submissions. This is done by sampling outputs and comparing them using the specified disparity function.
      
-3. (Optional) Clustering
+3. ### (Optional) Clustering
    - Run `cluster.py` to group similar student submissions. This step helps identify common errors and patterns in student responses. Enhance clustering with different disparity functions, projections, or input arguments.
      
-4. Result Management:
+4. ### Results Management:
     - All grading and clustering results are stored in the designated `results` directory. Individual student results are available in the `students` subdirectory.
 
 
@@ -154,6 +154,15 @@ If you'd like to cluster student programs, run
   - `--sids_file_path`: Same as above.
 
 Results are stored under the `results/clusters` directory for the `qid`.
+
+## Grading Parameters
+
+The default parameters we've suggested tend to work well with a variety of problems. However, StochasticGrade provides the flexibility to customize parameters as is best fit for your problem. Here are some recommendations for grading:
+- If your problem does not produce a scalar output, adjust the `--dtype` argument accordingly.
+- If you cannot afford to sample 409.6k student samples, adjust the `--max_n` parameter. Similarly, adjust the `--min_n` parameter to adjust the minimum number of samples.
+- Adjust `--n_scale_factor` to change the number of grading steps in the algorithm. A larger factor leads StochasticGrade to have fewer steps; a smaller factors leads StochasticGrade to have more steps.
+- For a quick, computationally efficient evaluation, it may be best to use `--scorer=TScorer` or `--scorer=MSDScorer`. For a more accurate, thorough evaluation, it may be best to use `--scorer=AndersonDarlingScorer` (default) or `--scorer=WassersteinScorer`. 
+- If you decide that you would like to change the false rejection rate of correct programs, adjust the `--frr` parameter in `stochastic_grade.py`.
 
 ## Troubleshooting
 
