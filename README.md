@@ -1,6 +1,18 @@
 # StochasticGrade
 
-This repository contains the code for StochasticGrade, an automated assessment framework for evaluating stochastic programs. StochasticGrade is introduced in the paper "Grading and Clustering Student Programs That Produce Probabilistic Output," published in EDM '24: the 17th International Conference on Educational Data Mining, 2024. 
+This repository contains the code for StochasticGrade, an automated assessment framework for evaluating stochastic programs. StochasticGrade is introduced in the paper "Grading and Clustering Student Programs That Produce Probabilistic Output," published in EDM '24: the 17th International Conference on Educational Data Mining, 2024.
+
+
+## Table of Contents
+1. [Installation](#installation)
+2. [Overview](#overview)
+3. [Example Usage](#example-usage)
+4. [Organizing Data for Your Problem](#organizing-data-for-your-problem)
+5. [Creating the Problem](#creating-the-problem)
+6. [Grading the Problem](#grading-the-problem)
+7. [Clustering Student Responses](#clustering-student-responses)
+8. [Tips on Setting the Grading Parameters](#tips-on-setting-the-grading-parameters)
+9. [Troubleshooting](#troubleshooting)
 
 
 ## Installation
@@ -155,14 +167,14 @@ If you'd like to cluster student programs, run
 
 Results are stored under the `results/clusters` directory for the `qid`.
 
-## Grading Parameters
+## Tips on Setting the Grading Parameters
 
 The default parameters we've suggested tend to work well with a variety of problems. However, StochasticGrade provides the flexibility to customize parameters as is best fit for your problem. Here are some recommendations for grading:
-- If your problem does not produce a scalar output, adjust the `--dtype` argument accordingly.
-- If you cannot afford to sample 409.6k student samples, adjust the `--max_n` parameter. Similarly, adjust the `--min_n` parameter to adjust the minimum number of samples.
-- Adjust `--n_scale_factor` to change the number of grading steps in the algorithm. A larger factor leads StochasticGrade to have fewer steps; a smaller factors leads StochasticGrade to have more steps.
-- For a quick, computationally efficient evaluation, it may be best to use `--scorer=TScorer` or `--scorer=MSDScorer`. For a more accurate, thorough evaluation, it may be best to use `--scorer=AndersonDarlingScorer` (default) or `--scorer=WassersteinScorer`. 
-- If you decide that you would like to change the false rejection rate of correct programs, adjust the `--frr` parameter in `stochastic_grade.py`.
+- `dtype`: `If your problem does not produce a scalar output, adjust the `--dtype` argument accordingly.
+- `min_n`/`max_n`: If you cannot afford to sample 409.6k student samples, adjust the `--max_n` parameter. Similarly, adjust the `--min_n` parameter to adjust the minimum number of samples.
+- `n_scale_factor`: Adjust `--n_scale_factor` to change the number of grading steps in the algorithm. A larger factor leads StochasticGrade to have fewer steps; a smaller factors leads StochasticGrade to have more steps.
+- `scorer`: Disparity function (scoring/comparison method). For a quick, computationally efficient evaluation, it may be best to use `--scorer=TScorer` or `--scorer=MSDScorer`. For a more accurate, thorough evaluation, it may be best to use `--scorer=AndersonDarlingScorer` (default) or `--scorer=WassersteinScorer`. Refer to Section 2.3 or Figure 3 for more information.
+- `frr`:  The false rejection rate for the problem. Default is 0.01. If you decide that you would like to change the false rejection rate of correct programs, adjust the `--frr` parameter in `stochastic_grade.py`. Increasing the false rejection rate decreases runtime and accuracy for correct programs, and likely increases accuracy for incorrect programs.
 
 ## Troubleshooting
 
