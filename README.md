@@ -13,8 +13,8 @@ This repository contains the code for StochasticGrade, an automated assessment f
 6. [Grading the Problem](#grading-the-problem)
 7. [Clustering Student Responses](#clustering-student-responses)
 ### Tips and Tricks
-9. [Tips on Setting the Grading Parameters](#tips-on-setting-the-grading-parameters)
-10. [Troubleshooting](#troubleshooting)
+8. [Tips on Setting the Grading Parameters](#tips-on-setting-the-grading-parameters)
+9. [Troubleshooting](#troubleshooting)
 
 
 ## Installation
